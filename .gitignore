@@ -1,5 +1,5 @@
 
-# VSCODE (GITHUB TEMPLATE)
+# VSCODE 
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -10,7 +10,7 @@
 # Local History for Visual Studio Code
 .history/
 
-# PYTHON (GITHUB TEMPLATE)
+# PYTHON 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
