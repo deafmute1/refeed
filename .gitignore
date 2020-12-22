@@ -1,11 +1,13 @@
+# GENERATED DATA and TEST CONFIGS
+refeed/static/atom
+refeed/data/
+config/
 
 # VSCODE 
 .vscode
 .vscode/*
 !.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+!.vscode/tasks.jsonsd
 *.code-workspace
 
 # Local History for Visual Studio Code
@@ -14,8 +16,7 @@
 # PYTHON 
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[cod]
-*$py.class
+*.py[casds
 
 # C extensions
 *.so

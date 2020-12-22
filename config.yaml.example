@@ -1,0 +1,21 @@
+accounts:
+  account-name: # this should be unique
+    server:
+      host: mail.example.com # Required. 
+      port: 993
+      use_uid: False
+      ssl: True
+      stream: False 
+      ssl_context: None
+      timeout: 300 
+    auth:
+      auth_type: 'login' # supported: oauth, login, plain_login
+      user: 'user@example.com'
+      password: '*******'
+
+rules: 
+  account-name: # must match to an account defined above!
+    folder: 'INBOX'
+    filters: # regex patterns to match against ENVELOPE fields - they are all listed below.
+
+
