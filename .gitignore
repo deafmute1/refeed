@@ -1,7 +1,7 @@
 # GENERATED DATA and TEST CONFIGS
-refeed/static/atom
-refeed/data/
-config/
+refeed/static/atom/*
+refeed/data/*
+config/*
 
 # VSCODE 
 .vscode

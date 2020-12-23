@@ -1,3 +1,4 @@
+# Place deployment config in refeed/config/config.yaml
 accounts:
   account-name: # this should be unique
     server:
@@ -9,13 +10,16 @@ accounts:
       ssl_context: None
       timeout: 300 
     auth:
-      auth_type: 'login' # supported: oauth, login, plain_login
+      auth_type: 'login' # Supported: oauth, login, plain_login
       user: 'user@example.com'
       password: '*******'
 
 rules: 
   account-name: # must match to an account defined above!
     folder: 'INBOX'
-    filters: # regex patterns to match against ENVELOPE fields - they are all listed below.
-
+    # regex patterns to match against header fields
+    # See https://github.com/SpamScope/mail-parser#description for full list of valid values
+    filters:
+      date: 'python regex here'
+      from_: 'python regex hgere'
 
