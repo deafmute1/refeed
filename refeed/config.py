@@ -3,7 +3,7 @@ __author__ = 'Ethan Djeric <me@ethandjeric.com>'
 #STDLIB
 from typing import List, Dict
 from abc import ABC
-
+import logging
 #PYPI
 import yaml
 
@@ -34,10 +34,8 @@ class Account(Config):
     def server_options(self, account_name:str) -> Dict:
        return self.config['accounts'][account_name]['server']
 
-    def login(self, account_name:str) -> Tuple[str, str]:
+    def credentials(self, account_name:str) -> Tuple[str, str]:
         return (self.config['accounts'][account_name]['auth']['auth_type']['user'], self.config['accounts'][account_name]['auth']['auth_type']['password'])
-
-
 
 class Feed(Config): 
     """ Child class of Config providing wrappers to access feed section of config 
@@ -47,12 +45,13 @@ class Feed(Config):
     def __init__(self, config_path:str):
         super().__init__(config_path)
 
-    def feed_names(self) -> List[str]:
+    def names(self) -> List[str]:
         try: 
             for e in self.config['feeds']:
                 yield e
-        except KeyError as e:
-            raise KeyError('Incorect syntax in or non-existent rule section. More {}'.format(e))
+        except Exception as e: # Exception gets *most* inbuilt exceptions, except KeyboardInterrupt, SystemInterrupt and some others which are out of scope
+            logging.critical('Failure when retrieving feed names from config.yaml. KeyError exception has been raised, refeed has crashed.', exc_info=True)
+            raise KeyError(e)
 
     def account_name(self, feed_name:str) -> str:
         return self.config['feeds'][feed_name]['account_name']

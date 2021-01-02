@@ -1,7 +1,8 @@
 # Place deployment config in refeed/config/config.yaml
 accounts:
   # This is a unique name used to identify and account. Each account name is to be specified ONLY once in the accounts section.
-  unique-account-name: 
+  # this is an internal identifer only; you may simple use acccount_one, account_two if you wish. 
+  unique-account-name:
     server:
       host: mail.example.com # Required. 
       port: 993
@@ -9,15 +10,14 @@ accounts:
       ssl: True
       stream: False 
       ssl_context: None
-      timeout: 300 
     auth:
-      auth_type: 'login' # Supported: oauth, login, plain_login
+      auth_type: 'login' # Supported: 'login' (use this if unsure), 'plain_login', 'oauth'
       user: 'user@example.com'
       password: '*******'
 
 feeds: 
   # A unique name must be provided for each feed (including across accounts). 
-  # TThis provies the atom feed name, and is used to identify it (static/atom/unique-feed-name.xml)
+  # This provies the atom feed (file) name, and is used to identify it. 
   unique-feed-name:
     folder: 'INBOX' # Required
     account_name: "my_account_name" # Required. Must match to a account defined above. 
