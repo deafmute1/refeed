@@ -6,6 +6,7 @@ NEXT RELEASE:
 - Test, test, test
   - Implement unit tests and generate data sets for it
     - will need to use real IMAP server - send generated email data to it or use in-the-wild data (?)
+  - Test typing with mypy
 - Implement dockerfile
 - Finish docs
     - README
