@@ -6,42 +6,41 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Generic, List, Tuple, TypeVar, Union
+import shelve
 
 # pypi
 import mailparser
-import yaml
 from imapclient import IMAPClient
 
+#from feedgen
+from . import config
 
-class Account():
+class MailFeed():
     """ Defines an instanceable IMAPClient object for one set of user supplied settings providing both imap server specification
     """
-    def __init__(self, server_options:dict, auth_type:str=None, login:Tuple[str, str]=None, name:str=None) -> None:
-        """ 
-        :param server_options: A dictionary with parameters for IMAPClient in the same order as required to call 
-                            See https://imapclient.readthedocs.io/en/2.1.0/api.html#imapclient-class
-        :param folder: Folder on server to monitor
-        :param auth: Authentification method; valid values: login, oauth, plain_login
-        :param login: a tuple as per (user, password) for the auth method
-        :param name: the name of the account, as per yaml configuration
-        """
-        self.server = IMAPClient(**server_options)  
+    def __init__(self, feed_name:str) -> None:
+        self.feed_name = feed_name
+        self.account_config = config.Account(Path(__file__, '/config', 'config.yaml'))
+        self.feed_config = config.Feed(Path(__file__, '/config', 'config.yaml'))
+
+        account_name = self.feed_config.account_name(self.feed_name)
+        self.server = IMAPClient(**self.account_config.server_options(account_name))  
         try: 
-            user, password = login
-            getattr(self.server, auth_type)(user, password)
+            user, password = self.account_config.login(account_name)
+            getattr(self.server, self.account_config.auth_type())(user, password)
         except TypeError:
             pass
-        self.name = name
 
-    def fetch_new_mail(self, folder:str, filters:Dict[str, str]) -> List[mailparser.MailParser]:
-        """ Returns mail returned by _new_mail_ids as a mailparser object when filters regex values match all its ENVELOPE data.
+    def fetch_new_mail(self) -> List[mailparser.MailParser]:
+        """ Returns mail returned by _new_mail_ids as a mailparser object when filters regex values match its mail fields
 
         :param folder: Folder on server to monitor
         :param filters:  A series of regex filters as dictionary values, with keys matching any item in mail ENVELOPE, including sub-items in Address fields
                         See: https://imapclient.readthedocs.io/en/2.1.0/api.html#imapclient.response_types.Envelope  
         """
-        self.server.select_folder(folder)
+        self.server.select_folder(self.feed_config.folder(self.feed_name))
         uuids = self._new_mail_ids()
+        filters = self.feed_config.filters(self.feed_name)
         retvar = []
         for uuid in uuids:
             mail = mailparser.parse_from_bytes(self.server.fetch([uuid], ['FULL']))
@@ -49,7 +48,7 @@ class Account():
                 try:
                     value_to_filter = getattr(mail, field)
                 except AttributeError as e:
-                    print ('({}): self.filter contains a key that is not present in parsed mail object'.format(e))
+                    raise AttributeError('filters contains a key that is not present in parsed mail object. Details: {}'.format(e))
                 if re.search(re_filter, value_to_filter) is None:
                     break
             else:  
@@ -63,7 +62,7 @@ class Account():
         if self._is_inital():
             criteria = 'ALL'
         elif not self._is_inital():
-            # IETF IMAP standards do to specify a TZ for 'INTERNALTIME', however UTC seems most likely. This is partly why 3 days instead of 1 or 2.
+            # IETF IMAP standards do not specify a TZ for 'INTERNALTIME', however UTC seems most likely. This is partly why 3 days instead of 1 or 2.
             criteria = [u'SINCE', (datetime.utcnow().date() - datetime.timedelta(days=2))] 
             self._store_not_initial()
         matching_ids = self.server.search(criteria, 'UTF-8')
@@ -71,42 +70,17 @@ class Account():
             return []
         return matching_ids
 
-    def _is_initial(self) -> bool:
-        with open(Path(__file__).joinpath('data', 'initialised.json', 'r')) as rf:
-            initialised = json.load(rf)
-        try:
-            return initialised[self.name]
-        except KeyError: 
-            return False
 
-    def _store_not_initial(self):
-        with open(Path(__file__).joinpath('data', 'initialised.json'), 'r') as rf:
-            initialised = json.load(rf)
-        initalised[self.name] = False
-        with open(Path(__file__).joinpath('data', 'initialised.json'), 'w') as wf:
-            json.dump(initialised)
-
-class Config(): 
-    """ Pull config from yaml files, and provide wrappers to prepare for Account() needs
-    """ 
-    def __init__(self, config_path:str) -> None:
-        with open(config_path) as f:
-            self.config = (yaml.safe_load(f))
-        self.accounts = []
-        for account in self.config['accounts']:        
-            self.accounts.append(account)
-
-    def auth_type(self, name:str) -> str:
-        return self.config['accounts'][name]['auth']['auth_type']
-
-    def server_options(self, name:str) -> Dict:
-       return self.config['accounts'][name]['server']
-
-    def login(self, name:str) -> Tuple[str, str]:
-        return (self.config['accounts'][name]['auth']['auth_type']['user'], self.config['accounts'][name]['auth']['auth_type']['password'])
-    
-    def folder(self, name:str) -> str: 
-        return self.config['rules'][name]['folder']
-    
-    def filters(self, name:str) -> Dict[str, str]: 
-        return self.config['rules'][name]['filters']
+    def _is_inital(self) -> bool:
+        with shelve.open(Path(__file__, '/data', 'init.shelf')) as shelf:
+            try:
+                return shelf[self.feed_name]
+            except KeyError:
+                if not (self.feed_name in shelf):
+                    return False
+                else: 
+                    raise KeyError()
+        
+    def _store_not_initial(self) -> None:
+        with shelve.open(Path(__file__, '/data', 'init.shelf')) as shelf: 
+            shelf[self.feed_name] = False

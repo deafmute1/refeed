@@ -1,6 +1,7 @@
 # Place deployment config in refeed/config/config.yaml
 accounts:
-  account-name: # this should be unique
+  # This is a unique name used to identify and account. Each account name is to be specified ONLY once in the accounts section.
+  unique-account-name: 
     server:
       host: mail.example.com # Required. 
       port: 993
@@ -14,12 +15,25 @@ accounts:
       user: 'user@example.com'
       password: '*******'
 
-rules: 
-  account-name: # must match to an account defined above!
-    folder: 'INBOX'
+feeds: 
+  # A unique name must be provided for each feed (including across accounts). 
+  # TThis provies the atom feed name, and is used to identify it (static/atom/unique-feed-name.xml)
+  unique-feed-name:
+    folder: 'INBOX' # Required
+    account_name: "my_account_name" # Required. Must match to a account defined above. 
+    alternate_cache: 25 # how many "alternate" http links from the feed entry to the raw html of the content/body to store before deleting the oldest
     # regex patterns to match against header fields
     # See https://github.com/SpamScope/mail-parser#description for full list of valid values
     filters:
       date: 'python regex here'
       from_: 'python regex hgere'
-
+    feed_info: 
+      protocol: https://  # Required - leave placeholder if you don't want to set a value
+      fqdn: example.com  # Required - leave placeholder if you don't want to set a value
+      author-name: 'John Doe' # Required - leave placeholder if you don't want to set a value
+      language: 'en' 
+      logo: 'logo.png' # a file located in refeed/refeed/static, that should be twice as wide as it is tall
+    
+    
+    
+    
