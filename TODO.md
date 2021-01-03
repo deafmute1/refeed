@@ -1,7 +1,4 @@
 NOW:
-- Implement logging across mail, feed and config 
-- Improve error handling in parrallel to logging
-  - exception handlers in config.py
 
 NEXT RELEASE:
 - Test, test, test
@@ -15,11 +12,12 @@ NEXT RELEASE:
     - method/class docs
     - requirements.txt
 - refeed.py:
-    - Implement some sort of scheduling paradigm
-    - Implement basic web server to serve static
-    - Write log to file
+- mail_to_feed.py
+    - setup tasks
     - Filter returned mail from MailFetch.new_mail() to check for uniqueness against feed
 
 FUTURE RELEASE/POTENTIAL FEATURES:
-- Implement web GUI to manage config
+- Implement web GUI and python web server to manage config
+  - flask + gunicorn (?)
 - Add option to move mail that has been added to feed to arbitrary folder. 
+- Add threading or async to tasker

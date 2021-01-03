@@ -1,16 +1,16 @@
-# Author: 'Ethan Djeric <me@ethandjeric.com>'
+__author__ = 'Ethan Djeric <me@ethandjeric.com>'
 
 #STDLIB
 import shelve
 from pathlib import Path
 from datetime import date, datetime
-from typing import Tuple
+from typing import Tuple, Dict
 import random
 import string
 import os
 import logging
 #PYPI
-from mailparser.mailparser import MailParser
+from mailparser import MailParser
 from mailparser.exceptions import MailParserReceivedParsingError
 from feedgen.feed import FeedGenerator
 # INTERNAL
@@ -24,7 +24,6 @@ class Feed():
     def __init__(self, feed_name:str) -> None:
         self.feed_name = feed_name
         self.config = config.Feed(Path(__file__).joinpath('config', 'config.yaml'))
-        self.is_context_manager = False # __enter__ is called after __init__, and will overwrite this if Feed is called as a Context Manager.
         self.alternates = {}
         self.added_mail_uuids = []
         self.written_mail_uuids = None
@@ -39,10 +38,11 @@ class Feed():
                     fg_config = self.config.info(self.feed_name)
                     self.fg = FeedGenerator()
                     self.fg.id('tag:{},{}/feeds/{}.xml'.format(fg_config['fqdn'], date.today(), feed_name))
-                    self.fg.link(rel='self', type='application/atom+xml', href='{}{}/feeds/{}.xml'.format(fg_config['protocol'], fg_config['fqdn'], feed_name))
+                    href_ = '{}{}/feeds/{}.xml'.format(fg_config['protocol'], fg_config['fqdn'], feed_name)
+                    self.fg.link(rel='self', type='application/atom+xml', href=href_)
                     self.fg.title(feed_name)
                     self.fg.subtitle('Feed generated from mail messages recieved at {} by refeed'.format(self.config.account_name(self.feed_name)))
-                    self.fg.author(name=fg_config['author_name'])
+                    self.fg.author(name=fg_config.get('author_name', 'Example Name'))
 
                     # Optional values
                     try: 
@@ -59,12 +59,16 @@ class Feed():
 
     # context manager
     def __enter__(self) -> Feed:
-        self.is_context_manager = True 
         return self
 
     def __exit__(self) -> None: 
-        _dump_shelves(self) # on exist, dump data to disk
+        self._dump_shelves()
 
+    def add_entries_from_dict_if_new(self, mails:Dict[int, MailParser]) -> None:
+        for uuid, mail in mails:
+            if FeedTools.uuid_not_in_feed(self.feed_name, uuid):
+                self.add_entry((uuid, mail))
+        
     def add_entry(self, mail:Tuple[int, MailParser]) -> None:
         random.seed(None, 2)
         fe = self.fg.add_entry(order='prepend') 
@@ -98,7 +102,7 @@ class Feed():
         self.fg.updated(now) 
 
         # cache uuids added to feed
-        self.added_mail_uuids.append(mail[0])
+        self.added_mail_uuids.append(mail[0]) 
 
     def generate_feed(self) -> None:
         # generate htmls
@@ -119,12 +123,8 @@ class Feed():
         finally: 
             self.written_mail_uuids = self.added_mail_uuids
 
-        # cleanup
+        # cleanup alts to cache
         FeedTools.cleanup_alts(self.config.alternate_cache())
-
-        # dump shelf data if not context manager
-        if not self.is_context_manager:
-            _dump_shelves()
 
     def _dump_shelves(self) -> None:
         with shelve.open(Path(__file__).joinpath('data', 'feeds.shelf')) as shelf:
@@ -156,8 +156,22 @@ class Feed():
 
 
 class FeedTools():
-    """ A uninstanced class to contain misscellanious standalone tools related to feed mangement.
+    """ A uninstanced class to contain misscellanious standalone class methods for feed mangement.
     """
+    @classmethod
+    def uuid_not_in_feed(cls, feed_name:str, uuid:int):
+        with shelve.open(Path(__file__).joinpath('data', 'mail_uuids.shelf')) as shelf:
+            try:
+                for uuids in shelf[feed_name]: 
+                    if uuid not in uuids: 
+                        return True
+                    else: 
+                        return False
+            except KeyError: # presume that this is first mail and no data is stored for feed
+                logging.warning('Could not find feed_name in mail_uuid.shelf when checking if mail uuid is in feed - this is a normal occurance if the feed has no mail entries in it yet. Returning True: uuid is not in feed yet')
+                return True
+                
+
     @classmethod
     def cleanup_alts(cls, feed_name:str, max_alts:int) -> None: 
         with shelve.open(Path(__file__).joinpath('data', 'alternates.shelf')) as shelf: 
@@ -226,6 +240,8 @@ class FeedTools():
             try: 
                 for feed in del_feeds:
                     del shelf[feed]                      
+            except KeyError: 
+                logging.error('Failed to remove alt id list for no longer defined feed from alternate_ids.shelf: {}'.format(feed), exc_info=True )
 
         # remove recieved mail uuids 
         with shelve.open(Path(__file__).joinpath('data', 'mail_uuids.shelf')) as shelf:
@@ -239,7 +255,6 @@ class FeedTools():
             except KeyError: 
                 logging.error('Failed to remove recieved mail uuid list for no longer defined feed from mail_uuids.shelf: {}'.format(feed), exc_info=True )
 
-    
     @classmethod
     def generate_unique_alt_id(cls) -> str: 
         """ Generate a psuedo-random 30 character alphanumeric (lower case only) id that is not in alternates.shelf

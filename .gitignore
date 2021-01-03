@@ -1,5 +1,6 @@
 # GENERATED DATA and TEST CONFIGS
-refeed/static/atom/*
+refeed/static/alt/*
+refeed/static/feed/*
 refeed/data/*
 config/*
 

@@ -1,39 +1,75 @@
-# Place deployment config in refeed/config/config.yaml
+# Place final deployment config in refeed/config/config.yaml
+# Don't leave empty lines in, they're there for readability of the documentation so you can tell what options the comment belongs to.
+# Anything noted as required MUST BE SET.
+
+# app level settings
+app:
+
+  # Valid options for log_level (from most to least verbose): DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_level: WARNING 
+
+  # how long to wait between trying to update feeds (an intege representing minutes)
+  wait_to_update: 5
+
+# imap settings
 accounts:
+
   # This is a unique name used to identify and account. Each account name is to be specified ONLY once in the accounts section.
   # this is an internal identifer only; you may simple use acccount_one, account_two if you wish. 
   unique-account-name:
+
     server:
-      host: mail.example.com # Required. 
+
+      # Required. 
+      host: mail.example.com
+
       port: 993
-      use_uid: False
       ssl: True
       stream: False 
-      ssl_context: None
+
     auth:
-      auth_type: 'login' # Supported: 'login' (use this if unsure), 'plain_login', 'oauth'
+
+      # Supported: 'login' (use this if unsure), 'plain_login', 'oauth'
+      auth_type: 'login'
+
       user: 'user@example.com'
       password: '*******'
 
+# everything related to the generation of the feed
 feeds: 
+
   # A unique name must be provided for each feed (including across accounts). 
   # This provies the atom feed (file) name, and is used to identify it. 
   unique-feed-name:
-    folder: 'INBOX' # Required
-    account_name: "my_account_name" # Required. Must match to a account defined above. 
-    alternate_cache: 25 # how many "alternate" http links from the feed entry to the raw html of the content/body to store before deleting the oldest
-    # regex patterns to match against header fields
-    # See https://github.com/SpamScope/mail-parser#description for full list of valid values
+
+    # Must a folder that exists on server
+    folder: 'INBOX'
+
+    # Required. Must match to a account defined above.
+    account_name: "my_account_name" 
+    
+    # Refeed adds "alternate" links for each feed entry in example.com/alt/*.html, 
+    # these links point to the the body/content of the entry *only* as a html file.
+    # Set this value to how many of these pages should be kept before deleting the oldest.
+    alternate_cache: 25 
+    
+    # Regex patterns to match against mail properties for filtering
+    # Regex should be standard python regex per 
+    #   - Offical docs: https://docs.python.org/3/library/re.html
+    #   - Online regex tester w/ python support: https://regex101.com/
+    # See https://github.com/SpamScope/mail-parser#description for full list of valid values for mail properties
+    # Some are probably not a good idea to use (e.g. body), or useless (timezone, sender ip address etc.).
+    # Properties you may want: bcc, cc, date, delivered_to, from_, subject, to,
     filters:
       date: 'python regex here'
-      from_: 'python regex hgere'
+      from_: 'python regex here'
+
     feed_info: 
-      protocol: https://  # Required - leave placeholder if you don't want to set a value
-      fqdn: example.com  # Required - leave placeholder if you don't want to set a value
-      author-name: 'John Doe' # Required - leave placeholder if you don't want to set a value
+      protocol: https:// 
+      fqdn: example.com 
+      author-name: 'John Doe'
       language: 'en' 
-      logo: 'logo.png' # a file located in refeed/refeed/static, that should be twice as wide as it is tall
-    
-    
-    
+
+      # A file located in refeed/refeed/static, that should be twice as wide as it is tall
+      logo: 'logo.png'
     
