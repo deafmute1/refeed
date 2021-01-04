@@ -1,4 +1,4 @@
-__author__ = 'Ethan Djeric <me@ethandjeric.com>'
+# Author: 'Ethan Djeric <me@ethandjeric.com>'
 
 # std lib
 import re
@@ -14,9 +14,11 @@ from ssl import SSLError, CertificateError
 import mailparser
 from imapclient import IMAPClient, exceptions as IMAPExceptions
 
-#from feedgen
-from . import config
+#feedgen
+from . import config, gconfig 
 
+config_path = gconfig.config_path
+data_path = gconfig.data_path
 
 class MailFetch():
     """ Provides tools to fetch mail as required using _IMAPConn
@@ -28,11 +30,13 @@ class MailFetch():
         IETF IMAP RFCs don't specify a TZ for 'INTERNALTIME'.
         """
         # open configs
-        account_config = config.Account(Path(__file__, '/config', 'config.yaml'))
-        feed_config = config.Feed(Path(__file__, '/config', 'config.yaml'))
+        account_config = config.Account(config_path)
+        feed_config = config.Feed(config_path)
 
         # get account info
-        account_name = feed_config.account_name()
+        account_name = feed_config.account_name(feed_name)
+        if account_name is None: 
+            return None 
         server_options = account_config.server_options(account_name)
         auth_type = account_config.auth_type(account_name)
         credentials = account_config.credentials(account_name)
@@ -40,7 +44,7 @@ class MailFetch():
         # get feed/filter info
         filters = feed_config.filters(feed_name)
         folder = feed_config.folder(feed_name)
-
+        logging.warning([(k,v) for k, v in server_options.items()])
         with _IMAPConn(account_name, server_options, auth_type, credentials) as server: 
             try: 
                 if server.folder_exists(folder):
@@ -103,7 +107,7 @@ class _IMAPConn():
     def __enter__(self) -> IMAPClient:
         return self.server
 
-    def __exit__(self) -> None:
+    def __exit__(self, exc_type, exc_value, exc_traceba) -> None:
         try: 
             self.server.logout()
         except IMAPExceptions.IMAPClientError: 

@@ -1,33 +1,36 @@
-__author__ = 'Ethan Djeric <me@ethandjeric.com>'
+#Author: = 'Ethan Djeric <me@ethandjeric.com>'
 
 #STDLIB
-from typing import List, Dict, DefaultDict, Union
+from typing import List, Dict, DefaultDict, Union, Tuple
 from abc import ABC
 from collections import defaultdict
 import logging
-from pathlib import Path, PurePath # PurePath is most base class of pathlib objects
-
 #PYPI
 import yaml
-
+# REFEED
+from . import gconfig 
 
 class Config(ABC): 
     """ Abstract parent class to pull config from yaml files.
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
     """ 
-    def __init__(self, config_path:PurePath) -> None:
+    def __init__(self, config_path:str) -> None:
+        logging.debug('Entering Config.__init__')
         try: 
             with open(config_path) as f:
                 self.config = (yaml.safe_load(f))
-
-
-class Account(Config): 
+                logging.debug('Loaded config.yaml')
+                logging.debug(self.config)
+        except Exception as e:
+            print(e)
+        
+class Account(Config):
     """ Child class of Config providing wrappers to access account section of config 
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
     """
-    def __init__(self, config_path:PurePath=Path(__file__).joinpath('/config', 'config.yaml')) -> None:
+    def __init__(self, config_path:str) -> None:
         super().__init__(config_path)
         
     def auth_type(self, account_name:str) -> str:
@@ -37,8 +40,8 @@ class Account(Config):
        return self.config['accounts'][account_name]['server']
 
     def credentials(self, account_name:str) -> Tuple[str, str]:
-        user = str(self.config['accounts'][account_name]['auth']['auth_type']['user'])
-        password = str(self.config['accounts'][account_name]['auth']['auth_type']['password'])
+        user = str(self.config['accounts'][account_name]['auth']['user'])
+        password = str(self.config['accounts'][account_name]['auth']['password'])
         return (user, password)
 
 class Feed(Config): 
@@ -46,17 +49,22 @@ class Feed(Config):
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
     """
-    def __init__(self, config_path:PurePath=Path(__file__).joinpath('/config', 'config.yaml')) -> None:
+    def __init__(self, config_path:str) -> None:
         super().__init__(config_path)
 
     def names(self) -> List[str]:
         try: 
             for e in self.config['feeds']:
                 yield e
+        except:
+            pass # fix later
 
-    def account_name(self, feed_name:str) -> str:
+    def account_name(self, feed_name:str) -> Union[str, type(None)]:
+        try: 
             return str(self.config['feeds'][feed_name]['account_name'])
-
+        except KeyError:
+            logging.critical('No matching account name found for {}, skipping feed generation'.format(feed_name))
+            return None 
     def folder(self, feed_name:str) -> str: 
         try: 
             return str(self.config['feeds'][feed_name]['folder'])
@@ -67,7 +75,7 @@ class Feed(Config):
     def filters(self, feed_name:str) -> Dict[str, str]: 
         return self.config['feeds'][feed_name]['filters']
     
-    def info(self, feed_name:str) -> DefaultDict[Union[[str, None]]]:
+    def info(self, feed_name:str) -> DefaultDict[str, str]:
         try:
             return defaultdict(None, self.config['feeds'][feed_name]['feed_info'])
         except KeyError: # feed_info heading doesnt exist
@@ -82,7 +90,7 @@ class Feed(Config):
             return 25
 
 class App(Config):
-    def __init__(self, config_path:PurePath=Path(__file__).joinpath('/config', 'config.yaml')) -> None:
+    def __init__(self, config_path:str) -> None:
         super().__init__(config_path)
 
     def log_level(self) -> str:
