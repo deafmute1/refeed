@@ -2,86 +2,108 @@
 
 # std lib
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple, Union, Tuple
 import shelve
 import logging
-from socket import socket as SocketError, timeout as SocketTimeout
+from socket import error as SocketError, timeout as SocketTimeout
 from ssl import SSLError, CertificateError
-
 # pypi
 import mailparser
 from imapclient import IMAPClient, exceptions as IMAPExceptions
-
 #feedgen
-from . import config, gconfig 
+from . import config, global_config 
 
-config_path = gconfig.config_path
-data_path = gconfig.data_path
+config_path = global_config.config_path
+data_path = global_config.data_path
+
+""" Please ignore the following pylint errors.
+    Errors due to Pylint bugs:
+       ` Value 'Union' is unsubscriptable` on typehints is a python3.9 error (PyCQA/pylint#3882)
+"""
+
 
 class MailFetch():
+
     """ Provides tools to fetch mail as required using _IMAPConn
     """
+
     @classmethod
-    def new_mail(cls, feed_name:str, since:int) -> Dict[int, mailparser.MailParser]:
+    def new_mail(cls, feed_name:str, since:int) -> Union[None, Dict[int, mailparser.MailParser]]:
+
         """ Returns mail with 'INTERNALTIME' ('SINCE' provides only date granularity) 'SINCE' since days ago.
         
         IETF IMAP RFCs don't specify a TZ for 'INTERNALTIME'.
         """
-        # open configs
-        account_config = config.Account(config_path)
-        feed_config = config.Feed(config_path)
 
-        # get account info
-        account_name = feed_config.account_name(feed_name)
-        if account_name is None: 
-            return None 
-        server_options = account_config.server_options(account_name)
-        auth_type = account_config.auth_type(account_name)
-        credentials = account_config.credentials(account_name)
+        try: 
+            # open configs
+            account_config = config.Account(config_path)
+            feed_config = config.Feed(config_path)
+            # get account info
+            account_name = feed_config.account_name(feed_name)
+            server_options = account_config.server_options(account_name)
+            auth_type = account_config.auth_type(account_name)
+            credentials = account_config.credentials(account_name)
+            # get feed/filter info
+            filters = feed_config.filters(feed_name)
+            folder = feed_config.folder(feed_name)
+        except config.UserConfigError() as e: 
+            raise ConfigError() from e 
 
-        # get feed/filter info
-        filters = feed_config.filters(feed_name)
-        folder = feed_config.folder(feed_name)
-        logging.warning([(k,v) for k, v in server_options.items()])
         with _IMAPConn(account_name, server_options, auth_type, credentials) as server: 
             try: 
                 if server.folder_exists(folder):
                     server.select_folder(folder)
                 else: 
-                    raise ValueError('Folder {} does not exist for account {}'.format(folder, account_name))
+                    logging.exception('Folder {} does not exist for account {}'.format(folder, account_name))
+                    raise ConfigError('Folder {} does not exist for account {}'.format(folder, account_name))
 
                 try: 
-                    uuids = server.search([u'SINCE', (datetime.utcnow().date() - datetime.timedelta(days=since))] , 'UTF-8')
-                except IMAPExceptions.InvalidCriteriaError: 
-                    logging.critical('Malformed imap search criteria, refeed will never be able to fetch new mail. Go get the author!')
+                    uuids = server.search([u'SINCE', (datetime.utcnow().date() - timedelta(days=since))] , 'UTF-8')
+                except IMAPExceptions.InvalidCriteriaError as e: 
+                    logging.critical('Malformed imap search criteria, refeed will never be able to fetch new mail. Go get the author!', exc_info=True)
+                    raise GenericHandledException() from e
 
                 new_mail = {}
                 for uuid in uuids:
                     uuid = int(uuid) # uuid is 32bit int, just cast to int in case IMAPClient is returning bytes. 
-                    mail = mailparser.parse_from_bytes(server.fetch([uuid], ['FULL']))
-                    for field, re_filter in filters.items():
-                        try:
-                            value_to_filter = getattr(mail, field)
-                        except AttributeError as e:
-                            raise AttributeError('filters contains a key that is not present in parsed mail object. Details: {}'.format(e))
-                        if re.search(re_filter, value_to_filter) is None:
-                            continue
-                        else:
-                            new_mail[uuid] = mail
-                return new_mail
+                    mail = mailparser.parse_from_bytes(server.fetch([uuid], ['RFC822'])[uuid][b'RFC822'])
+                    if filters is not None: 
+                        for field, re_filters in filters.items():
+                            try:
+                                value_to_filter = getattr(mail, field)
+                            except AttributeError:
+                                logging.exception('filters contains a key that is not present in parsed mail object')
+                                raise ConfigError() from e
 
-            except (SocketTimeout, SocketError): 
-                logging.error('A network error with the socket library has caused mail._IMAPConn in mail.MailFetch.newmail() to fail/drop server connection for account {}'.format, exc_info=True)
+                            for filter_ in  re_filters:
+                                if re.search(filter_, str(value_to_filter)) is None: 
+                                    break
+                            else: 
+                                new_mail[uuid] = mail   
+
+            except (SocketTimeout, SocketError) as e: 
+                logging.exception('A network error with the socket library has caused mail._IMAPConn in mail.MailFetch.newmail() to fail/drop server connection for account {}'.format(account_name))
+                raise GenericHandledException() from e
             except (SSLError, CertificateError):
-                logging.error('A SSL Error has caused mail._IMAPConn in mail.MailFetch.newmail() to fail/drop server connection', exc_info=True)
-            except IMAPExceptions.ClientError:
-                logging.error('Some otherwise unhandled imap server error has caused an error mail.MailFetch.newmail()', exc_info=True)
-            except ValueError as e: 
-                logging.error(e)
+                logging.exception('A SSL Error has caused mail._IMAPConn in mail.MailFetch.newmail() to fail/drop server connection')
+                raise GenericHandledException() from e
+            except IMAPExceptions.IMAPClientError as e:
+                logging.exception('Some otherwise unhandled imap server error has caused an error in mail.MailFetch.newmail()')
+                raise GenericHandledException() from e
+            except IMAPExceptions.LoginError as e: 
+                logging.exception('Failed to authenticate to imap server')
+                raise GenericHandledException() from e
+            except Exception as e: 
+                logging.exception('Unknown error occured in mail.MailFetch.new_mail')
+                raise GenericHandledException() from e
+
+            return new_mail
 
 class _IMAPConn():
+
     """ Class for MailFetch which defines connection + auth to IMAP server.
     Separated from MailFetch in order to implement as a context manager, so we don't leave the server connection open for the life of MailFetch()
     """
@@ -91,26 +113,36 @@ class _IMAPConn():
         self.account_name = account_name
 
         #connect
-        try:
-            self.server = IMAPClient(use_uid=True, timeout=None, **server_options)  
-        except IMAPExceptions.IMAPClientError: 
-            logging.exception('Failed to connect to imap account {}'.format(self.account_name))
+        self.server = IMAPClient(use_uid=True, timeout=None, **server_options)  
         
         # login
         try: 
             getattr(self.server, auth_type)(*credentials)
-        except (NameError): 
-            logging.warning('No credentials are passed to mail._IMAPConn for imap server {}:{}, are you sure this is correct? Try checking config.yaml'.format(self.server_options['host'], self.server_options['port']))
-        except (TypeError, IMAPExceptions.LoginError):
-            logging.exception('Failed to authenticate to imap account {}'.format(self.account_name))
+        except (NameError, TypeError) as e: 
+            logging.exception('No (or wrong type of) credentials were passed to mail._IMAPConn for imap server {} from config.yaml, are you sure this is correct? '.format(self.server_options['host']), exc_info=True)
+            raise IMAPExceptions.LoginError() from e
 
     def __enter__(self) -> IMAPClient:
         return self.server
 
-    def __exit__(self, exc_type, exc_value, exc_traceba) -> None:
+    def __exit__(self, exc_type, exc_value, exc_traceback) -> None:
         try: 
             self.server.logout()
         except IMAPExceptions.IMAPClientError: 
             self.server.shutdown()  #try this if above fails for some reason
-        except: 
-            logging.warning('Failed to close connection to imap account {}'.format(self.account_name))
+
+
+class ConfigError(Exception):
+
+    """ To be rasied when mail.py recieved bad data from config module, or data does not conform to mail object/imap server.
+
+    """
+    pass
+
+class GenericHandledException(Exception):
+
+    """ A generic exception to be raised when handling other exceptions in mail module.
+
+    Allows tasker module to skip current job if a handled exception occurs (as opposed to simply skipping for all Exceptions.)
+    """
+    pass

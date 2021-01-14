@@ -6,6 +6,15 @@ refeed/config/*.yaml
 # ignore test imap server settings to prevent ppls credntials being push to public upstream
 refeed/test/testdata/*yaml
 
+# Kdevelop
+.kdev4
+*.kdevelop
+*.kdevelop.filelist
+*.kdevelop.pcs
+*.kdevses
+.*kate-swp
+
+
 # VSCODE 
 .vscode
 .vscode/*

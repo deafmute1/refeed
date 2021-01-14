@@ -15,11 +15,12 @@ from mailparser import MailParser
 from mailparser.exceptions import MailParserReceivedParsingError
 from feedgen.feed import FeedGenerator
 # INTERNAL
-from . import config, gconfig 
+#pylint tells you not to do this, but it is correct
+from . import config, global_config 
 
-config_path = gconfig.config_path
-data_path = gconfig.data_path
-static_path = gconfig.static_path
+config_path = global_config.config_path
+data_path = global_config.data_path
+static_path = global_config.static_path
 
 class Feed():
     """ Instanceable class to manage a named feed including storage, retrieval and genration functions.
@@ -63,10 +64,10 @@ class Feed():
                     raise KeyError(e)
 
     # context manager
-    def __enter__(self) -> self:
+    def __enter__(self) -> Feed:
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_traceba) -> None: 
+    def __exit__(self, exc_type, exc_value, exc_traceback) -> None: 
         self._dump_shelves()
 
     def add_entries_from_dict_if_new(self, mails:Dict[int, MailParser]) -> bool:
@@ -74,14 +75,10 @@ class Feed():
             for uuid, mail in mails:
                 if FeedTools.uuid_not_in_feed(self.feed_name, uuid):
                     self.add_entry((uuid, mail))
-                else: 
-                    return True
         except (TypeError, ValueError): 
-            logging.error('Given NoneType as mailobject to Feed, some error in mail with IMAP, Skipping', exc_info=True)
-            return False
-        except Exception as e: 
+            logging.error('Given NoneType as mailobject to Feed, some error in mail with IMAP.', exc_info=True)
+        except Exception: 
             logging.error('Unexpected error', exc_info=True)
-            return False
 
     def add_entry(self, mail:Tuple[int, MailParser]) -> None:
         random.seed(None, 2)
@@ -90,9 +87,9 @@ class Feed():
         
         # id
         try:
-            fe.id('tag:{},{}/feeds/{}.xml:{}'.format(fg_config['fqdn'], date.today(), feed_name, mail[1].message_id))
+            fe.id('tag:{},{}/feeds/{}.xml:{}'.format(fg_config['fqdn'], date.today(), self.feed_name,mail[0]))
         except (AttributeError, MailParserReceivedParsingError): 
-            fe.id('tag:{},{}/feeds/{}.xml:ID_NOT_FOUND-{}'.format(fg_config['fqdn'], date.today(), feed_name, ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))))
+            fe.id('tag:{},{}/feeds/{}.xml:ID_NOT_FOUND-{}'.format(fg_config['fqdn'], date.today(), self.feed_name, ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))))
 
         # title
         try: 
@@ -103,7 +100,7 @@ class Feed():
         # alt link and body contents
         try:
             alt_id = FeedTools.generate_unique_alt_id()
-            self.alternates[alternate_id] = mail[1].body
+            self.alternates[alt_id] = mail[1].body
             alt_link = '{}{}/alt-html/{}.html'.format(fg_config['protocol'], fg_config['fqdn'], alt_id)
             fe.link(rel='alternate', type='text/html', href=alt_link)
             fe.contents(content=mail[1].body, src=alt_link, type='text/html')
@@ -120,14 +117,16 @@ class Feed():
 
     def generate_feed(self) -> None:
         # generate htmls
-        try: 
-            for alt_id, body in self.alternates.items():
-                with open(Path(static_path).joinpath('alt', '{}.html'.format(str(alt_id))), 'w') as f:
-                    f.write(body)
-        except Exception: # Exception gets *most* inbuilt exceptions, except KeyboardInterrupt, SystemInterrupt and some others which are out of scope
-            logging.error('Failed to write some html alt pages to file for new entries for feed {}'.format(self.feed_name), exc_info=True)
-        finally: 
-            logging.info('Successfully generated html alt pages: {} for feed {}'.format(str(list(self.alternates.keys()), self.feed_name)))
+        if self.alternates != {}:
+            try: 
+                for alt_id, body in self.alternates.items():
+                    with open(Path(static_path).joinpath('alt', '{}.html'.format(str(alt_id))), 'w') as f:
+                        f.write(body)
+            except Exception: # Exception gets *most* inbuilt exceptions, except KeyboardInterrupt, SystemInterrupt and some others which are out of scope
+                logging.error('Failed to write some html alt pages to file for new entries for feed {}'.format(self.feed_name), exc_info=True)
+            finally:
+                logging.info('Successfully generated html alt pages: {} for feed {}'.format(list(self.alternates.keys()), self.feed_name))
+                FeedTools.cleanup_alts(self.feed_name, self.config.alternate_cache(self.feed_name))
 
         # generate xml
         try: 
@@ -136,9 +135,6 @@ class Feed():
             logging.error('Failed to generate and write new copy of feed {} to file'.format(self.feed_name))
         finally: 
             self.written_mail_uuids = self.added_mail_uuids
-
-        # cleanup alts to cache
-        FeedTools.cleanup_alts(self.config.alternate_cache())
 
     def _dump_shelves(self) -> None:
         with shelve.open(str(Path(data_path).joinpath('feeds.shelf'))) as shelf:
@@ -201,8 +197,8 @@ class FeedTools():
                         except FileNotFoundError:
                             logging.error('feed.FeedTools.cleanup_alts attempted to delete static/{}.html and failed'.format(alt_id), exc_info=True) 
                         finally: 
-                            deleted_ids.append(alt_id)
-                    shelf[feed_name] = [e for e in shelf[feed_name] if e not in deleted_ids]
+                            deleted_ids.append(alt_id) 
+                    shelf[feed_name] = [e for e in shelf[feed_name] if e not in deleted_ids] 
 
     @classmethod
     def cleanup_feeds(cls) -> None:
@@ -247,12 +243,19 @@ class FeedTools():
             for feed, ids in shelf.items(): 
                 if feed not in conf.names(): 
                     del_feeds.append(feed)
+                    
+                    try: 
+                        os.remove(Path(static_path).joinpath('feed', '{}.html'.format(feed)))
+                    except Exception:
+                        logging.error('Failed to remove feed file for no longer defined feed: {}'.format(feed), exc_info=True)
+
                     for id_ in ids: 
                         try:
-                            os.remove(Path(static_path).joinpath('{}.xml'.format(feed)))
-                        except: 
-                            logging.error('Failed to remove feed alternate html file for no longer defined feed from alternate_ids.shelf: {}'.format(feed), exc_info=True)  
-            try: 
+                            os.remove(Path(static_path).joinpath('alt', '{}.html'.format(id_)))
+                        except Exception: 
+                            logging.error('Failed to remove feed alternate html files: {}, for no longer defined feed: {}'.format(id_, feed), exc_info=True)  
+
+            try: # just as it is a bad idea to mutate dict during iteration on it, it is probably a bad idea for shelves.
                 for feed in del_feeds:
                     del shelf[feed]                      
             except KeyError: 
