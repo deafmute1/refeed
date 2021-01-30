@@ -5,6 +5,7 @@ from typing import List, Dict, Union, Tuple, DefaultDict
 from abc import ABC
 import logging
 from collections import defaultdict
+<<<<<<< HEAD
 from pathlib import Path 
 import re
 
@@ -25,6 +26,13 @@ paths_flag_dir = {
     "data": True,
     "static": True, 
 }
+=======
+import re
+#PYPI
+import yaml
+# REFEED
+from . import global_config 
+>>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
 
 class Config(ABC): 
     """ Abstract parent class to pull config from yaml files.
@@ -173,4 +181,8 @@ class App(Config):
 class UserConfigError(Exception):
     """ To be raised if data returned from config.yaml does not match specifications
     """
+<<<<<<< HEAD
     pass
+=======
+    pass
+>>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a

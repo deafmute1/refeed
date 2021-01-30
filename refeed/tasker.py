@@ -6,6 +6,7 @@ from datetime import datetime
 import time 
 from pathlib import Path
 import signal
+<<<<<<< HEAD
 
 # 3RD PARTY 
 import schedule
@@ -16,6 +17,12 @@ import schedule
  The second form, where the namespace is modified, is equivalent to setting 
  the value of the import attrs to a module-specific global"""
 import feed, mail, config
+=======
+# pypi
+import schedule
+# refeed
+from . import feed, mail, config, global_config
+>>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
 
 class Run():
     """ The main logic and scheduling for refeed.
@@ -25,6 +32,7 @@ class Run():
         signal.signal(signal.SIGHUP, self._exit)
         signal.signal(signal.SIGTERM, self._exit)
         self.run = schedule.Scheduler()
+<<<<<<< HEAD
         conf = config.App(config.paths["config"])
 
         # add tasks to scheduler
@@ -37,6 +45,19 @@ class Run():
         _Tasks.make_run_dirs() 
 
         # Recurring tasks 
+=======
+        self._schedule()
+        self._main()
+
+    def _schedule(self):
+        conf = config.App(global_config.config_path)
+        # add schedules
+        self.run.every(conf.wait_to_update()).minutes.do(_Tasks.generate_feeds_from_new_mail)
+        self.run.every(1).week.do(_Tasks.cleanup_feeds)
+
+    def _main(self): 
+        _Tasks.cleanup_feeds() # run once, as job will not run unless this has been running for 1 week
+>>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
         while self.run.jobs != []: 
             self.run.run_pending()
             time.sleep(1)
@@ -49,12 +70,20 @@ class _Tasks():
     @classmethod
     def generate_feeds_from_new_mail(cls):
         logging.info('Mail fetch and feed generation job starting')
+<<<<<<< HEAD
         conf = config.Feed(config.paths["config"])
+=======
+        conf = config.Feed(global_config.config_path)
+>>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
         for feed_name in conf.names():
             logging.info('feed_name_tasks: {}'.format(feed_name))
             with feed.Feed(feed_name) as f:
                 try:
+<<<<<<< HEAD
                     # IMAP doesnt specify TZ for 'INTERNALDATE', so 2 days is the smallest value I'm happy with.
+=======
+                    # IMAP doesnt specify TZ for 'INTERNALDATE', so 2 days is the samllest value I'm happy with.
+>>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
                     new_mail = mail.MailFetch.new_mail(feed_name, 2)
                     if mail is None: 
                         logging.warning('mail.MailFetch.new_mail returned None. Either there have been no emails recieved at server matching filter for 2 days or an unhandled error occured. Ending feed generation job for {}'.format(feed_name) )
@@ -82,6 +111,11 @@ class _Tasks():
     def cleanup_feeds(cls):
         logging.info('Cleaning up unwanted feeds')
         feed.FeedTools.cleanup_feeds()
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
 
     @classmethod 
     def make_run_dirs(cls):

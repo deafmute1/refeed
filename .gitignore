@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Runtime data (and configs) 
 refeed/run 
 
@@ -26,6 +27,26 @@ tags
 [._]*.un~
 
 # VSCODE (from github/gitignore) 
+=======
+# GENERATED DATA and TEST CONFIGS
+refeed/static/alt/
+refeed/static/feed/
+refeed/data/*.shelf
+refeed/config/*.yaml
+# ignore test imap server settings to prevent ppls credntials being push to public upstream
+refeed/test/testdata/*yaml
+
+# Kdevelop
+.kdev4
+*.kdevelop
+*.kdevelop.filelist
+*.kdevelop.pcs
+*.kdevses
+.*kate-swp
+
+
+# VSCODE 
+>>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
 .vscode
 .vscode/*
 !.vscode/settings.json
