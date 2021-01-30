@@ -1,15 +1,21 @@
 # Author: 'Ethan Djeric <me@ethandjeric.com>'
 
-# stdlib
+# STDLIB
 import logging
 from datetime import datetime
 import time 
 from pathlib import Path
 import signal
-# pypi
+
+# 3RD PARTY 
 import schedule
-# refeed
-from . import feed, mail, config
+
+# INTERNAL 
+""" If we use the form `import x`, we can modify x.var. 
+ However, with the form `from . import x`(relative or absolute), we cannot.
+ The second form, where the namespace is modified, is equivalent to setting 
+ the value of the import attrs to a module-specific global"""
+import feed, mail, config
 
 class Run():
     """ The main logic and scheduling for refeed.

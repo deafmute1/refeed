@@ -7,10 +7,11 @@ import logging
 from collections import defaultdict
 from pathlib import Path 
 import re
-#PYPI
-import yaml
-# REFEED
 
+# 3RD PARTY
+import yaml
+
+# Default paths 
 paths = {
     "config": Path(__file__).parents[1].joinpath('run', 'config.yaml').resolve(),
     "log": Path(__file__).parents[1].joinpath('run', 'log', 'root.log').resolve(),

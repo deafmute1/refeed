@@ -1,6 +1,6 @@
 # Author: 'Ethan Djeric <me@ethandjeric.com>'
 
-# std lib
+# STDLIB 
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,11 +9,17 @@ import shelve
 import logging
 from socket import error as SocketError, timeout as SocketTimeout
 from ssl import SSLError, CertificateError
-# pypi
+
+# 3RD PARTY 
 import mailparser
 from imapclient import IMAPClient, exceptions as IMAPExceptions
-#feedgen
-from . import config 
+
+# INTERNAL 
+""" If we use the form `import x`, we can modify x.var. 
+ However, with the form `from . import x`(relative or absolute), we cannot.
+ The second form, where the namespace is modifies, it is equivalent to setting 
+ the value of the import attrs to a module-specific global"""
+import config 
 
 """ Please ignore the following pylint errors.
     Errors due to Pylint bugs:

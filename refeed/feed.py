@@ -9,13 +9,18 @@ from typing import Tuple, Dict
 import random
 import string
 import logging
-#PYPI
+
+# 3RD PARTY 
 from mailparser import MailParser
 from mailparser.exceptions import MailParserReceivedParsingError
 from feedgen.feed import FeedGenerator
+
 # INTERNAL
-#pylint tells you not to do this, but it is correct
-from . import config 
+""" If we use the form `import x`, we can modify x.var. 
+ However, with the form `from . import x`(relative or absolute), we cannot.
+ The second form, where the namespace is modifies, it is equivalent to setting 
+ the value of the import attrs to a module-specific global"""
+import config
 
 class Feed():
     """ Instanceable class to manage a named feed including storage, retrieval and genration functions.

@@ -1,21 +1,31 @@
-# GENERATED DATA and TEST CONFIGS
-refeed/static/alt/
-refeed/static/feed/
-refeed/data/*.shelf
-refeed/config/*.yaml
-# ignore test imap server settings to prevent ppls credntials being push to public upstream
-refeed/test/testdata/*yaml
+# Runtime data (and configs) 
+refeed/run 
 
-# Kdevelop
-.kdev4
-*.kdevelop
-*.kdevelop.filelist
-*.kdevelop.pcs
-*.kdevses
-.*kate-swp
+# Test data (that we don't want public!)
+refeed/test/data/private 
 
+# VIM (from githbub/gitignore) 
+# Swap
+[._]*.s[a-v][a-z]
+!*.svg  # comment out if you don't need vector files
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
 
-# VSCODE 
+# Session
+Session.vim
+Sessionx.vim
+
+# Temporary
+.netrwhist
+*~
+# Auto-generated tag files
+tags
+# Persistent undo
+[._]*.un~
+
+# VSCODE (from github/gitignore) 
 .vscode
 .vscode/*
 !.vscode/settings.json
@@ -25,7 +35,7 @@ refeed/test/testdata/*yaml
 # Local History for Visual Studio Code
 .history/
 
-# PYTHON 
+# PYTHON (from github/gitignore) 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[casds
