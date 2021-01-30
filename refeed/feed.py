@@ -21,13 +21,6 @@ from feedgen.feed import FeedGenerator
  The second form, where the namespace is modifies, it is equivalent to setting 
  the value of the import attrs to a module-specific global"""
 import config
-# INTERNAL
-#pylint tells you not to do this, but it is correct
-from . import config, global_config 
-
-config_path = global_config.config_path
-data_path = global_config.data_path
-static_path = global_config.static_path
 
 class Feed():
     """ Instanceable class to manage a named feed including storage, retrieval and genration functions.
@@ -36,7 +29,6 @@ class Feed():
     """
     def __init__(self, feed_name:str) -> None:
         self.feed_name = feed_name
-        self.config = config.Feed(config.paths["config"])
         self.alternates = {}
         self.added_mail_uuids = []
         self.written_mail_uuids = None
@@ -47,15 +39,15 @@ class Feed():
                 self.fg = shelf[self.feed_name]
             except KeyError as e:
                 if not self.feed_name in shelf:
-                    # Mandatory
-                    fg_config = self.config.info(self.feed_name)
+                    # Mandatory ATOM values
+                    fg_config = config.yaml.feed.info(self.feed_name)
                     self.fg = FeedGenerator()
                     self.fg.id('tag:{},{}/feeds/{}.xml'.format(fg_config['fqdn'], date.today(), feed_name))
                     href_ = '{}{}/feeds/{}.xml'.format(fg_config['protocol'], fg_config['fqdn'], feed_name)
                     self.fg.link(rel='self', type='application/atom+xml', href=href_)
                     self.fg.title(feed_name)
-                    self.fg.subtitle('Feed generated from mail messages recieved at {} by refeed'.format(self.config.account_name(self.feed_name)))
-                    self.fg.author(name=fg_config.get('author_name', 'Example Name'))
+                    self.fg.subtitle('Feed generated from mail messages recieved at {} by refeed'.format(config.yaml.feed.account_name(self.feed_name)))
+                    self.fg.author(name=fg_config.get('author_name', 'Default Name'))
 
                     # Optional values
                     try: 
@@ -90,7 +82,7 @@ class Feed():
     def add_entry(self, mail:Tuple[int, MailParser]) -> None:
         random.seed(None, 2)
         fe = self.fg.add_entry(order='prepend') 
-        fg_config = self.config.info(self.feed_name)
+        fg_config = config.yaml.feed.info(self.feed_name)
         
         # id
         try:
@@ -133,7 +125,7 @@ class Feed():
                 logging.error('Failed to write some html alt pages to file for new entries for feed {}'.format(self.feed_name), exc_info=True)
             finally:
                 logging.info('Successfully generated html alt pages: {} for feed {}'.format(list(self.alternates.keys()), self.feed_name))
-                FeedTools.cleanup_alts(self.feed_name, self.config.alternate_cache(self.feed_name))
+                FeedTools.cleanup_alts(self.feed_name, config.yaml.feed.alternate_cache(self.feed_name))
 
         # generate xml
         try: 
@@ -218,16 +210,15 @@ class FeedTools():
             - the alternate html pages themselves, in /static/alt
             - the recieved mail uuids in mail_uuids.shelf
 
-        This is a highly expensive operation, especially since where possible it does not assume all of the above data sources are in agreement with each other and instead checks each source against the config.
-        It is intended to be run only when the refeed is started.
+        This is a highly expensive operation, especially since where possible it does not assume all of the above data sources 
+        are in agreement with each other and instead checks each source against the config. It is intended to be run only when the refeed is started.
         """
-        conf = config.Feed(config.paths["config"]) 
 
         # remove fg object, atom feed xml
         with shelve.open(str(Path(config.paths["data"]).joinpath('feeds.shelf'))) as shelf:
             del_feeds = []
             for feed in shelf.keys(): 
-                if feed not in conf.names():
+                if feed not in config.yaml.feed.names():
                     del_feeds.append(feed)  # we should not remove objects from shelf as we iterate over it
             try:
                 for feed in del_feeds:
@@ -248,7 +239,7 @@ class FeedTools():
         with shelve.open(str(Path(config.paths["data"]).joinpath('alternate_ids.shelf'))) as shelf:
             del_feeds = []
             for feed, ids in shelf.items(): 
-                if feed not in conf.names(): 
+                if feed not in config.yaml.feed.names(): 
                     del_feeds.append(feed)
                     
                     try: 
@@ -272,7 +263,7 @@ class FeedTools():
         with shelve.open(str(Path(config.paths["data"]).joinpath('mail_uuids.shelf'))) as shelf:
             del_feeds = []
             for feed in shelf.keys(): 
-                if feed not in conf.names():
+                if feed not in config.yaml.feed.names():
                     del_feeds.append(feed)
             try:
                 for feed in del_feeds:

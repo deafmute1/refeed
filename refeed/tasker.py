@@ -6,7 +6,7 @@ from datetime import datetime
 import time 
 from pathlib import Path
 import signal
-from sys import exit 
+import sys   
 
 # 3RD PARTY 
 import schedule
@@ -22,40 +22,44 @@ class Run():
     """ The main logic and scheduling for refeed.
         Run from refeed.main().
     """
-    def __init__(self): 
+    def __init__(self) -> None:
+        _Tasks.pull_yaml_config()        
+        # start root logger (TODO: Add loggers per module) 
+        logging.basicConfig(filename=str(refeed.config.paths["log"]), level=conf.log_level(), filemode='a', format='%(asctime)s %(message)s')
+
+        # handle SIGHUP and SIGTERM
         signal.signal(signal.SIGHUP, self._exit)
         signal.signal(signal.SIGTERM, self._exit)
-        self.run = schedule.Scheduler()
-        conf = config.App(config.paths["config"])
 
-        # add tasks to scheduler
+        # setup scheduler 
+        self.run = schedule.Scheduler()
         self.run.every(conf.wait_to_update()).minutes.do(_Tasks.generate_feeds_from_new_mail)
         self.run.every(1).week.do(_Tasks.cleanup_feeds)
 
-        # Main 
-        # Startup tasks 
+        # Order unspecific startup jobs 
         _Tasks.cleanup_feeds() 
         _Tasks.make_run_dirs() 
 
-        # Repeating tasks 
+        # Repeating jobs 
         while self.run.jobs != []: 
             self.run.run_pending()
             time.sleep(1)
+            _Tasks.pull_yaml_config() 
+            time.sleep(1)
 
         logging.critical("Job list has somehow become empty without manual clearing; exiting") 
-        exit("Exiting due to empty Job List")
+        sys.exit("Exiting due to empty Job List")
 
-    def _exit(self):
+    def _exit(self) -> None:
         logging.critical('Either SIGHUP/SIGTERM sent to refeed; exiting by clearing job list - any job currently in progress will complete. ')
         self.run.clear()
-        exit("Exiting due to SIGHUP/SIGTERM")
+        sys.exit("Exiting due to SIGHUP/SIGTERM")
 
 class _Tasks():
     @classmethod
-    def generate_feeds_from_new_mail(cls):
+    def generate_feeds_from_new_mail(cls) -> None:
         logging.info('Mail fetch and feed generation job starting')
-        conf = config.Feed(config.paths["config"])
-        for feed_name in conf.names():
+        for feed_name in config.yaml.feed.names():
             logging.info('feed_name_tasks: {}'.format(feed_name))
             with feed.Feed(feed_name) as f:
                 try:
@@ -81,15 +85,14 @@ class _Tasks():
                     return schedule.CancelJob
                     
             logging.info('Feed Generated')
-            return 0
 
     @classmethod
-    def cleanup_feeds(cls):
+    def cleanup_feeds(cls) -> None:
         logging.info('Cleaning up unwanted feeds')
         feed.FeedTools.cleanup_feeds()
 
     @classmethod 
-    def make_run_dirs(cls):
+    def make_run_dirs(cls) -> None:
         for name, path in config.paths.values():
             if config.paths_flag_dir[name]:
                 try: 
@@ -98,3 +101,9 @@ class _Tasks():
                     logging.info("Directory {} from config.paths[{}] not created as it already exists.".format(str(path), name))
                 else:
                     logging.info("Directory {} created".format(str(path)))
+
+    @classmethod
+    def pull_yaml_config(cls) -> None:
+        config.yaml = config.YAMLContainer(config.paths["config"])
+        config.paths['static'] = config.yaml.app.static_path() 
+

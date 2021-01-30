@@ -1,9 +1,7 @@
 __author__ = 'Ethan Djeric <me@ethandjeric.com>'
 
-<<<<<<< HEAD
 #STDLIB 
-import logging 
-from sys import argv, exit 
+import sys  
 from pathlib import Path 
 
 # INTERNAL
@@ -13,20 +11,17 @@ from pathlib import Path
  the value of the import attrs to a module-specific global"""
 import refeed 
 
-def main():
+def main() -> None:
     # allow user to set custom config location: 
-    if len(argv) > 2: 
-        exit("Too many arguments!")
-    elif len(argv) == 2:
-        config_path = Path(str(argv[1])).resolve() # shouldn't need str() here
+    if len(sys.argv) > 2: 
+        sys.exit("Too many arguments!")
+    elif len(sys.argv) == 2:
+        config_path = Path(str(sys.argv[1])).resolve() # shouldn't need str() here
         if config_path.is_file(): 
             refeed.config.paths["config"] == config_path 
         else: 
-            exit("Invalid path - is not a path to a file on this filesystem!")
+            sys.exit("Invalid path - is not a path to a file on this filesystem!")
 
-    conf = refeed.config.App(config.paths["config"])
-    # log to file
-    logging.basicConfig(filename=str(refeed.config.paths["log"]), level=conf.log_level(), filemode='a', format='%(asctime)s %(message)s')
     refeed.tasker.Run()
 
 if __name__ == '__main__':

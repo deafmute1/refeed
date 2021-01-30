@@ -5,7 +5,6 @@ from typing import List, Dict, Union, Tuple, DefaultDict
 from abc import ABC
 import logging
 from collections import defaultdict
-<<<<<<< HEAD
 from pathlib import Path 
 import re
 
@@ -26,15 +25,27 @@ paths_flag_dir = {
     "data": True,
     "static": True, 
 }
-=======
-import re
-#PYPI
-import yaml
-# REFEED
-from . import global_config 
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
 
-class Config(ABC): 
+yaml = None 
+
+class YAMLContainer():  
+    """ Intended to be a system-wide container to the below methods/classes in this module
+        in order to avoid having to pull up an instance and grab from disc in every function within refeed. 
+
+        At run time (i.e. in tasker, between each full runthrough of the main task) init this class,
+        and store the instance to config.yaml. Therefore, this can be accessed globally in refeed,
+        without having to pass this instance around to each function.
+
+    :param config_path: An absolute filesystem path to a yaml file per config.yaml.example space, using
+                        pathlib.Path object.
+    """
+    def __init__(self, config_path:Path) -> None: 
+        self.account = _PullAccount(config_path)
+        self.feed = _PullFeed(config_path) 
+        self.app = _PullApp(config_path)
+        
+
+class _PullConfig(ABC): 
     """ Abstract parent class to pull config from yaml files.
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
@@ -47,8 +58,8 @@ class Config(ABC):
                 logging.debug('Loaded config.yaml')
         except Exception as e:
             print(e)
-        
-class Account(Config):
+
+class _PullAccount(PullConfig):
     """ Child class of Config providing wrappers to access account section of config 
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
@@ -67,7 +78,7 @@ class Account(Config):
         password = str(self.config['accounts'][account_name]['auth']['password'])
         return (user, password)
 
-class Feed(Config): 
+class _PullFeed(PullConfig): 
     """ Child class of Config providing wrappers to access feed section of config 
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
@@ -141,7 +152,7 @@ class Feed(Config):
             return retvar
 
 
-class App(Config):
+class _PullApp(PullConfig):
     def __init__(self, config_path:Path) -> None:
         super().__init__(config_path)
 
@@ -163,8 +174,6 @@ class App(Config):
         except Exception: 
             return 30
 
-
-
     def wait_to_update(self) -> str:
         try:
             retvar = self.config['app']['wait_to_update']
@@ -178,11 +187,10 @@ class App(Config):
         else:
             return retvar
 
+    def static_path(self) -> Path:
+        return self.config['app']['static_path'] 
+
 class UserConfigError(Exception):
     """ To be raised if data returned from config.yaml does not match specifications
     """
-<<<<<<< HEAD
     pass
-=======
-    pass
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a

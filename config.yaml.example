@@ -1,15 +1,19 @@
-# Place final deployment config in refeed/config/config.yaml
-# Don't leave empty lines in, they're there for readability of the documentation so you can tell what options the comment belongs to.
+# Don't leave empty lines in, they're there for readability of the documentation so you can tell what options the comment belongs to. They WILL break YAML parsing. 
 # Anything noted as required MUST BE SET.
 
 # app level settings
 app:
 
   # Valid options for log_level (from most to least verbose): DEBUG, INFO, WARNING, ERROR, CRITICAL
-  log_level: WARNING 
+  log_level: 'WARNING'
 
   # how long to wait between trying to update feeds (an intege representing minutes)
+  # Default: 15
   wait_to_update: 5
+
+  # path to folder to be served by web server (contains xml feeds, alternate html pages, logo) 
+  # Default: <refeed install root>/static 
+  static_path: '/var/www/html/refeed'
 
 # imap settings
 accounts:
@@ -21,7 +25,7 @@ accounts:
     server:
 
       # Required. 
-      host: mail.example.com
+      host: 'mail.example.com'
 
       port: 993
       ssl: True
@@ -67,11 +71,11 @@ feeds:
         - 'python regex here'
         - 'python regex here'
     feed_info: 
-      protocol: https:// 
-      fqdn: example.com 
+      protocol: 'https://'
+      fqdn: 'example.com' 
       author-name: 'John Doe'
       language: 'en' 
 
-      # A file located in refeed/refeed/static, that should be twice as wide as it is tall
+      # A file located in config.paths["static"], that should be twice as wide as it is tall
       logo: 'logo.png'
     

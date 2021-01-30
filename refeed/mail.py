@@ -40,17 +40,14 @@ class MailFetch():
         """
 
         try: 
-            # open configs
-            account_config = config.Account(config.paths["config"])
-            feed_config = config.Feed(config.paths["config"])
             # get account info
-            account_name = feed_config.account_name(feed_name)
-            server_options = account_config.server_options(account_name)
-            auth_type = account_config.auth_type(account_name)
-            credentials = account_config.credentials(account_name)
+            account_name = config.yaml.feed.account_name(feed_name)
+            server_options = config.yaml.account.server_options(account_name)
+            auth_type = config.yaml.account.auth_type(account_name)
+            credentials = config.yaml.account.credentials(account_name)
             # get feed/filter info
-            filters = feed_config.filters(feed_name)
-            folder = feed_config.folder(feed_name)
+            filters = config.yaml.feed.filters(feed_name)
+            folder = config.yaml.feed.folder(feed_name)
         except config.UserConfigError() as e: 
             raise ConfigError() from e 
 
