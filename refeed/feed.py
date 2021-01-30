@@ -8,18 +8,14 @@ from datetime import date, datetime
 from typing import Tuple, Dict
 import random
 import string
-import os
 import logging
 #PYPI
 from mailparser import MailParser
 from mailparser.exceptions import MailParserReceivedParsingError
 from feedgen.feed import FeedGenerator
 # INTERNAL
-from . import config, gconfig 
-
-config_path = gconfig.config_path
-data_path = gconfig.data_path
-static_path = gconfig.static_path
+#pylint tells you not to do this, but it is correct
+from . import config 
 
 class Feed():
     """ Instanceable class to manage a named feed including storage, retrieval and genration functions.
@@ -28,13 +24,13 @@ class Feed():
     """
     def __init__(self, feed_name:str) -> None:
         self.feed_name = feed_name
-        self.config = config.Feed(config_path)
+        self.config = config.Feed(config.paths["config"])
         self.alternates = {}
         self.added_mail_uuids = []
         self.written_mail_uuids = None
 
         # Retrieve fg from shelf is it exists otherwise create it using config options
-        with shelve.open(str(Path(data_path).joinpath('feeds.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('feeds.shelf'))) as shelf:
             try:
                 self.fg = shelf[self.feed_name]
             except KeyError as e:
@@ -51,7 +47,7 @@ class Feed():
 
                     # Optional values
                     try: 
-                        self.fg.logo(Path(static_path).joinpath(fg_config['logo']))
+                        self.fg.logo(str(Path(config.paths["static"]).joinpath(fg_config['logo'])))
                     except KeyError: 
                         pass
 
@@ -63,10 +59,10 @@ class Feed():
                     raise KeyError(e)
 
     # context manager
-    def __enter__(self) -> self:
+    def __enter__(self) -> Feed:
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_traceba) -> None: 
+    def __exit__(self, exc_type, exc_value, exc_traceback) -> None: 
         self._dump_shelves()
 
     def add_entries_from_dict_if_new(self, mails:Dict[int, MailParser]) -> bool:
@@ -74,14 +70,10 @@ class Feed():
             for uuid, mail in mails:
                 if FeedTools.uuid_not_in_feed(self.feed_name, uuid):
                     self.add_entry((uuid, mail))
-                else: 
-                    return True
         except (TypeError, ValueError): 
-            logging.error('Given NoneType as mailobject to Feed, some error in mail with IMAP, Skipping', exc_info=True)
-            return False
-        except Exception as e: 
+            logging.error('Given NoneType as mailobject to Feed, some error in mail with IMAP.', exc_info=True)
+        except Exception: 
             logging.error('Unexpected error', exc_info=True)
-            return False
 
     def add_entry(self, mail:Tuple[int, MailParser]) -> None:
         random.seed(None, 2)
@@ -90,9 +82,9 @@ class Feed():
         
         # id
         try:
-            fe.id('tag:{},{}/feeds/{}.xml:{}'.format(fg_config['fqdn'], date.today(), feed_name, mail[1].message_id))
+            fe.id('tag:{},{}/feeds/{}.xml:{}'.format(fg_config['fqdn'], date.today(), self.feed_name,mail[0]))
         except (AttributeError, MailParserReceivedParsingError): 
-            fe.id('tag:{},{}/feeds/{}.xml:ID_NOT_FOUND-{}'.format(fg_config['fqdn'], date.today(), feed_name, ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))))
+            fe.id('tag:{},{}/feeds/{}.xml:ID_NOT_FOUND-{}'.format(fg_config['fqdn'], date.today(), self.feed_name, ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))))
 
         # title
         try: 
@@ -103,7 +95,7 @@ class Feed():
         # alt link and body contents
         try:
             alt_id = FeedTools.generate_unique_alt_id()
-            self.alternates[alternate_id] = mail[1].body
+            self.alternates[alt_id] = mail[1].body
             alt_link = '{}{}/alt-html/{}.html'.format(fg_config['protocol'], fg_config['fqdn'], alt_id)
             fe.link(rel='alternate', type='text/html', href=alt_link)
             fe.contents(content=mail[1].body, src=alt_link, type='text/html')
@@ -120,32 +112,31 @@ class Feed():
 
     def generate_feed(self) -> None:
         # generate htmls
-        try: 
-            for alt_id, body in self.alternates.items():
-                with open(Path(static_path).joinpath('alt', '{}.html'.format(str(alt_id))), 'w') as f:
-                    f.write(body)
-        except Exception: # Exception gets *most* inbuilt exceptions, except KeyboardInterrupt, SystemInterrupt and some others which are out of scope
-            logging.error('Failed to write some html alt pages to file for new entries for feed {}'.format(self.feed_name), exc_info=True)
-        finally: 
-            logging.info('Successfully generated html alt pages: {} for feed {}'.format(str(list(self.alternates.keys()), self.feed_name)))
+        if self.alternates != {}:
+            try: 
+                for alt_id, body in self.alternates.items():
+                    with Path(config.paths["static"]).joinpath('alt', '{}.html'.format(str(alt_id))).open(mode='w') as f:
+                        f.write(body)
+            except Exception: # Exception gets *most* inbuilt exceptions, except KeyboardInterrupt, SystemInterrupt and some others which are out of scope
+                logging.error('Failed to write some html alt pages to file for new entries for feed {}'.format(self.feed_name), exc_info=True)
+            finally:
+                logging.info('Successfully generated html alt pages: {} for feed {}'.format(list(self.alternates.keys()), self.feed_name))
+                FeedTools.cleanup_alts(self.feed_name, self.config.alternate_cache(self.feed_name))
 
         # generate xml
         try: 
-           self.fg.atom_file(Path(static_path).joinpath('feed', '{}.xml'.format(self.feed_name)))
+           self.fg.atom_file(str(Path(config.paths["static"]).joinpath('feed', '{}.xml'.format(self.feed_name))))
         except Exception: # TODO: Find out what fucking exceptions that feedgen actually raises, if any(not documented - check source)
             logging.error('Failed to generate and write new copy of feed {} to file'.format(self.feed_name))
         finally: 
             self.written_mail_uuids = self.added_mail_uuids
 
-        # cleanup alts to cache
-        FeedTools.cleanup_alts(self.config.alternate_cache())
-
     def _dump_shelves(self) -> None:
-        with shelve.open(str(Path(data_path).joinpath('feeds.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('feeds.shelf'))) as shelf:
             shelf[self.feed_name] = self.fg
             logging.info('Atom data for feed {} stored to disk'.format(self.feed_name))
         
-        with shelve.open(str(Path(data_path).joinpath('alternate_ids.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('alternate_ids.shelf'))) as shelf:
             try:
                 shelf[self.feed_name] = shelf[self.feed_name].extend(list(self.alternates.keys()))
             except (KeyError, AttributeError): # feed alternates list does not exist yet
@@ -154,7 +145,7 @@ class Feed():
             finally: 
                 logging.info('Alt id data for feed {} stored back to disk'.format(self.feed_name))
 
-        with shelve.open(str(Path(data_path).joinpath('mail_uuids.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('mail_uuids.shelf'))) as shelf:
             try: 
                 shelf[self.feed_name] = shelf[self.feed_name].extend(self.written_mail_uuids)
             except (KeyError, AttributeError): # feed id list does not exist yet
@@ -174,7 +165,7 @@ class FeedTools():
     """
     @classmethod
     def uuid_not_in_feed(cls, feed_name:str, uuid:int):
-        with shelve.open(str(Path(data_path).joinpath('mail_uuids.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('mail_uuids.shelf'))) as shelf:
             try:
                 for uuids in shelf[feed_name]: 
                     if uuid not in uuids: 
@@ -188,7 +179,7 @@ class FeedTools():
 
     @classmethod
     def cleanup_alts(cls, feed_name:str, max_alts:int) -> None: 
-        with shelve.open(str((Path(data_path).joinpath('alternates.shelf')))) as shelf: 
+        with shelve.open(str((Path(config.paths["data"]).joinpath('alternates.shelf')))) as shelf: 
             if not isinstance(shelf[feed_name], list):
                 raise TypeError('Alternate list in shelf for feed {} is not a list'.format(feed_name))
             else: 
@@ -197,12 +188,12 @@ class FeedTools():
                     deleted_ids = []
                     for alt_id in delete_ids:
                         try:
-                            os.remove((Path(static_path).joinpath('alt', '{}.html'.format(alt_id))))
+                            Path(config.paths["static"]).joinpath('alt', '{}.html'.format(alt_id)).unlink()
                         except FileNotFoundError:
                             logging.error('feed.FeedTools.cleanup_alts attempted to delete static/{}.html and failed'.format(alt_id), exc_info=True) 
                         finally: 
-                            deleted_ids.append(alt_id)
-                    shelf[feed_name] = [e for e in shelf[feed_name] if e not in deleted_ids]
+                            deleted_ids.append(alt_id) 
+                    shelf[feed_name] = [e for e in shelf[feed_name] if e not in deleted_ids] 
 
     @classmethod
     def cleanup_feeds(cls) -> None:
@@ -218,10 +209,10 @@ class FeedTools():
         This is a highly expensive operation, especially since where possible it does not assume all of the above data sources are in agreement with each other and instead checks each source against the config.
         It is intended to be run only when the refeed is started.
         """
-        conf = config.Feed(config_path) 
+        conf = config.Feed(config.paths["config"]) 
 
         # remove fg object, atom feed xml
-        with shelve.open(str(Path(data_path).joinpath('feeds.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('feeds.shelf'))) as shelf:
             del_feeds = []
             for feed in shelf.keys(): 
                 if feed not in conf.names():
@@ -234,32 +225,39 @@ class FeedTools():
 
                 
         # remove atom feed xml 
-        for file in Path(static_path).joinpath('feed').iterdir(): 
+        for file in Path(config.paths["static"]).joinpath('feed').iterdir(): 
             if file.is_file():
                 try:
-                    os.remove(Path(static_path).joinpath('feed', '{}'.format(file)))
-                except Exception: 
+                    Path(config.paths["static"]).joinpath('feed', '{}'.format(file)).unlink()
+                except FileNotFoundError: 
                     logging.error('Failed to remove feed xml file for no longer defined feed from /static/feed: {}'.format(file), exc_info=True)
         
         # remove alt ids and pages - this is the only place we do not check each item against config as alt page names are only matched to feed names by alternate_ids.shelf
-        with shelve.open(str(Path(data_path).joinpath('alternate_ids.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('alternate_ids.shelf'))) as shelf:
             del_feeds = []
             for feed, ids in shelf.items(): 
                 if feed not in conf.names(): 
                     del_feeds.append(feed)
+                    
+                    try: 
+                        Path(config.paths["static"]).joinpath('feed', '{}.html'.format(feed)).unlink()
+                    except FileNotFoundError:
+                        logging.error('Failed to remove feed file for no longer defined feed: {}'.format(feed), exc_info=True)
+
                     for id_ in ids: 
                         try:
-                            os.remove(Path(static_path).joinpath('{}.xml'.format(feed)))
-                        except: 
-                            logging.error('Failed to remove feed alternate html file for no longer defined feed from alternate_ids.shelf: {}'.format(feed), exc_info=True)  
-            try: 
+                            Path(config.paths["static"]).joinpath('alt', '{}.html'.format(id_)).unlink()
+                        except FileNotFoundError: 
+                            logging.error('Failed to remove feed alternate html files: {}, for no longer defined feed: {}'.format(id_, feed), exc_info=True)  
+
+            try: # just as it is a bad idea to mutate dict during iteration on it, it is probably a bad idea for shelves.
                 for feed in del_feeds:
                     del shelf[feed]                      
             except KeyError: 
                 logging.error('Failed to remove alt id list for no longer defined feed from alternate_ids.shelf: {}'.format(feed), exc_info=True )
 
         # remove recieved mail uuids 
-        with shelve.open(str(Path(data_path).joinpath('mail_uuids.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('mail_uuids.shelf'))) as shelf:
             del_feeds = []
             for feed in shelf.keys(): 
                 if feed not in conf.names():
@@ -274,7 +272,7 @@ class FeedTools():
     def generate_unique_alt_id(cls) -> str: 
         """ Generate a psuedo-random 30 character alphanumeric (lower case only) id that is not in alternates.shelf
         """
-        with shelve.open(str(Path(data_path).joinpath('alternates.shelf'))) as shelf:
+        with shelve.open(str(Path(config.paths["data"]).joinpath('alternates.shelf'))) as shelf:
             all_ids = []
             try: 
                 for feed_ids in shelf.values(): 
@@ -284,7 +282,7 @@ class FeedTools():
                 pass
 
         random.seed(None, 2)
-        alternate_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=30)) 
+        alternate_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=30)) 
         while alternate_id in all_ids:
-            alternate_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=30)) 
+            alternate_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=30)) 
         return alternate_id

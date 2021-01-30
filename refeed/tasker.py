@@ -5,60 +5,85 @@ import logging
 from datetime import datetime
 import time 
 from pathlib import Path
+import signal
 # pypi
 import schedule
 # refeed
-from . import feed, mail, config, gconfig
-
-log_path = gconfig.log_path
-config_path = gconfig.config_path
+from . import feed, mail, config
 
 class Run():
-    """  
+    """ The main logic and scheduling for refeed.
+        Run from refeed.main().
     """
     def __init__(self): 
-        self.startup()
-        self.main()
+        signal.signal(signal.SIGHUP, self._exit)
+        signal.signal(signal.SIGTERM, self._exit)
+        self.run = schedule.Scheduler()
+        conf = config.App(config.paths["config"])
 
-    def startup(self):
-        conf = config.App(config_path)
-        loglevel = conf.log_level()
-        # log to file
-        logging.basicConfig(filename=log_path, level=getattr(logging, loglevel), filemode='a')
-        # log to console 
-        console = logging.StreamHandler()
-        logging.getLogger('').addHandler(console) # '' = root logger
-        # startup tasks
-        _Tasks.cleanup_feeds()
-        # add schedules
-        schedule.every(conf.wait_to_update()).minutes.do(_Tasks.generate_feeds_from_new_mail())
-        schedule.every(1).week.do(_Tasks.cleanup_feeds())
+        # add tasks to scheduler
+        self.run.every(conf.wait_to_update()).minutes.do(_Tasks.generate_feeds_from_new_mail)
+        self.run.every(1).week.do(_Tasks.cleanup_feeds)
 
-    def main(self): 
-        while True: 
-            schedule.run_pending()
+        # Main 
+        # Startup tasks 
+        _Tasks.cleanup_feeds() 
+        _Tasks.make_run_dirs() 
+
+        # Recurring tasks 
+        while self.run.jobs != []: 
+            self.run.run_pending()
             time.sleep(1)
+
+    def _exit(self):
+        logging.critical('SIGHUP or SIGTERM sent to refeed, exiting after finishing currently in progress jobs.')
+        self.run.clear()
 
 class _Tasks():
     @classmethod
     def generate_feeds_from_new_mail(cls):
         logging.info('Mail fetch and feed generation job starting')
-        conf = config.Feed(config_path)
+        conf = config.Feed(config.paths["config"])
         for feed_name in conf.names():
-            logging.debug('feed_name_tasks: {}',format(feed_name))
+            logging.info('feed_name_tasks: {}'.format(feed_name))
             with feed.Feed(feed_name) as f:
-                # IMAP doesnt specify TZ for 'INTERNALDATE', so 2 days is the samllest value I'm happy with.
-                success = f.add_entries_from_dict_if_new(mail.MailFetch.new_mail(feed_name, 2))
-                if not success: 
-                        logging.error('Some error further up the log has caused failure to be reported and job to be canceled before generate_feed()')
+                try:
+                    # IMAP doesnt specify TZ for 'INTERNALDATE', so 2 days is the smallest value I'm happy with.
+                    new_mail = mail.MailFetch.new_mail(feed_name, 2)
+                    if mail is None: 
+                        logging.warning('mail.MailFetch.new_mail returned None. Either there have been no emails recieved at server matching filter for 2 days or an unhandled error occured. Ending feed generation job for {}'.format(feed_name) )
                         return schedule.CancelJob
-                f.generate_feed()
+                except (mail.ConfigError, mail.GenericHandledException):
+                    logging.exception('Handled exception raised in mail.MailFetch.new_mail({f}). Ending feed generation job for {f}'.format(f=feed_name))
+                    return schedule.CancelJob
+
+                try: 
+                    f.add_entries_from_dict_if_new(new_mail)
+                except Exception:
+                    logging.exception('Unknown error occured in feed.Feed.add_entries_from_dict_if_new(). Skipping feed generation for {}'.format(feed_name))
+                    return schedule.CancelJob
+
+                try: 
+                    f.generate_feed()
+                except Exception:
+                    logging.exception('Unknown error occured in feed.Feed.generate_feed(). Skipping feed generation for {}'.format(feed_name))
+                    return schedule.CancelJob
+                    
             logging.info('Feed Generated')
+            return 0
 
     @classmethod
     def cleanup_feeds(cls):
         logging.info('Cleaning up unwanted feeds')
-        return feed.FeedTools.cleanup_feeds()
+        feed.FeedTools.cleanup_feeds()
 
-
-
+    @classmethod 
+    def make_run_dirs(cls):
+        for name, path in config.paths.values():
+            if config.paths_flag_dir[name]:
+                try: 
+                    path.mkdir(parents=True)
+                except FileExistsError:
+                    logging.info("Directory {} from config.paths[{}] not created as it already exists.".format(str(path), name))
+                else:
+                    logging.info("Directory {} created".format(str(path)))

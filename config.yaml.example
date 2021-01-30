@@ -53,7 +53,7 @@ feeds:
     # Set this value to how many of these pages should be kept before deleting the oldest.
     alternate_cache: 25 
     
-    # Regex patterns to match against mail properties for filtering
+    # Lists of regex patterns to match against a mail property for filtering
     # Regex should be standard python regex per 
     #   - Offical docs: https://docs.python.org/3/library/re.html
     #   - Online regex tester w/ python support: https://regex101.com/
@@ -61,9 +61,11 @@ feeds:
     # Some are probably not a good idea to use (e.g. body), or useless (timezone, sender ip address etc.).
     # Properties you may want: bcc, cc, date, delivered_to, from_, subject, to,
     filters:
-      date: 'python regex here'
-      from_: 'python regex here'
-
+      date: 
+        - 'python regex here'
+      from_: # when providing a list, only mail that matches ALL regex in list will be added to feed
+        - 'python regex here'
+        - 'python regex here'
     feed_info: 
       protocol: https:// 
       fqdn: example.com 

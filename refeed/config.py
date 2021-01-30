@@ -1,27 +1,41 @@
 #Author: = 'Ethan Djeric <me@ethandjeric.com>'
 
 #STDLIB
-from typing import List, Dict, DefaultDict, Union, Tuple
+from typing import List, Dict, Union, Tuple, DefaultDict
 from abc import ABC
-from collections import defaultdict
 import logging
+from collections import defaultdict
+from pathlib import Path 
+import re
 #PYPI
 import yaml
 # REFEED
-from . import gconfig 
+
+paths = {
+    "config": Path(__file__).parents[1].joinpath('run', 'config.yaml').resolve(),
+    "log": Path(__file__).parents[1].joinpath('run', 'log', 'root.log').resolve(),
+    "data": Path(__file__).parent[1].joinpath('run', 'data').resolve(),
+    "static": Path(__file__).parent[1].joinpath('run', 'static').resolve() ,
+}
+
+paths_flag_dir = {
+    "config": False,
+    "log": False, 
+    "data": True,
+    "static": True, 
+}
 
 class Config(ABC): 
     """ Abstract parent class to pull config from yaml files.
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
     """ 
-    def __init__(self, config_path:str) -> None:
+    def __init__(self, config_path:Path) -> None:
         logging.debug('Entering Config.__init__')
         try: 
-            with open(config_path) as f:
+            with config_path.open() as f:
                 self.config = (yaml.safe_load(f))
                 logging.debug('Loaded config.yaml')
-                logging.debug(self.config)
         except Exception as e:
             print(e)
         
@@ -30,7 +44,7 @@ class Account(Config):
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
     """
-    def __init__(self, config_path:str) -> None:
+    def __init__(self, config_path:Path) -> None:
         super().__init__(config_path)
         
     def auth_type(self, account_name:str) -> str:
@@ -49,61 +63,113 @@ class Feed(Config):
 
     :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
     """
-    def __init__(self, config_path:str) -> None:
+    def __init__(self, config_path:Path) -> None:
         super().__init__(config_path)
 
     def names(self) -> List[str]:
         try: 
             for e in self.config['feeds']:
-                yield e
-        except:
-            pass # fix later
+                yield str(e)
+        except KeyError as e:
+            logging.critical('No feed names found in config.yaml, raising UserConfigError.', exc_info=True)
+            raise UserConfigError() from e
 
     def account_name(self, feed_name:str) -> Union[str, type(None)]:
         try: 
             return str(self.config['feeds'][feed_name]['account_name'])
-        except KeyError:
-            logging.critical('No matching account name found for {}, skipping feed generation'.format(feed_name))
-            return None 
+        except KeyError as e:
+            logging.error('No matching account name found for {}, raising UserConfigError'.format(feed_name), exc_info=True)
+            raise UserConfigError() from e
+            
     def folder(self, feed_name:str) -> str: 
         try: 
             return str(self.config['feeds'][feed_name]['folder'])
         except KeyError: # return default value
-            logging.error('No folder found for {}, using default value "INBOX"'.format(feed_name))
+            logging.warning('No folder found for {}, using default value "INBOX"'.format(feed_name), exc_info=True)
             return 'INBOX'
  
-    def filters(self, feed_name:str) -> Dict[str, str]: 
-        return self.config['feeds'][feed_name]['filters']
-    
+    def filters(self, feed_name:str) -> Union[Dict[str, List[re.Pattern]], None]: 
+        """ Returns filters, does not check if is valid regex
+        """
+        try:
+            filters = self.config['feeds'][feed_name]['filters']
+        except KeyError: 
+            logging.warning("No filters found in config.yaml for {}, is this correct?".format(feed_name), exc_info=True)
+            return None
+
+        ret_filters = {}
+        for key, value in filters.items(): 
+            try:
+                ret_filters[str(key)] = [re.compile(str(e)) for e in value]
+            except re.error as e: 
+                logging.exception("Invalid regex in filters for feed: {}, header: {}".format(feed_name, key))
+                raise UserConfigError() from e
+            except TypeError as e:
+                logging.exception("Bad type in filters for feed: {}, maybe failure to provide regex as a YAML list?".format(feed_name))
+                raise UserConfigError() from e 
+        return ret_filters
+
     def info(self, feed_name:str) -> DefaultDict[str, str]:
         try:
-            return defaultdict(None, self.config['feeds'][feed_name]['feed_info'])
+            # None is acccepted by default dict, but actually causes it to just behave as standard dict 
+            # lamba: None will actually provide None instead of KeyError as its a callable
+            return  defaultdict(lambda: None, self.config['feeds'][feed_name]['feed_info']) 
         except KeyError: # feed_info heading doesnt exist
-            logging.warning('No heading in config.yaml called feed_info found, using NoneType for all settings')
-            return defaultdict(None)
+            logging.exception('No heading in config.yaml called feed_info found, using NoneType for all settings')
+            return defaultdict(lambda: None)
 
     def alternate_cache(self, feed_name:str) -> int: 
         try:
-            return int(self.config['feeds'][feed_name]['alternate_cache'])
+            retvar = self.config['feeds'][feed_name]['alternate_cache']
         except KeyError:
-            logging.info('No setting alternate cache found for feed {}, using deafult value 25'.format(feed_name))
+            logging.info('No setting alternate cache found for feed {}, using default value 25'.format(feed_name), exc_info=True)
             return 25
 
+        if not isinstance(retvar, int):
+            logging.exception('[feeds][{}][alternate_cache] value is not int'.format(feed_name))
+            raise UserConfigError('[feeds][{}][alternate_cache] value is not int'.format(feed_name))
+        else:
+            return retvar
+
+
 class App(Config):
-    def __init__(self, config_path:str) -> None:
+    def __init__(self, config_path:Path) -> None:
         super().__init__(config_path)
 
     def log_level(self) -> str:
+        # See https://docs.python.org/3/library/logging.html#levels
+        encode_level = { 
+            'critical'.casefold(): 50,
+            'error'.casefold(): 40,
+            'warning'.casefold(): 30,
+            'info'.casefold(): 20,
+            'debug'.casefold(): 10,
+        }
+
         try:
-            return str(self.config['app']['log_level'])
-        except KeyError: 
-            logging.info('No setting log_level found for refeed, using default value WARNING')
-            return 'WARNING'
+            return encode_level[str(self.config['app']['log_level']).casefold()]
+        except KeyError:
+            logging.error('Either [app][log_level] is not set in config.yaml, or it is a bad value. Returning default log level (warning)')
+            return 30
+        except Exception: 
+            return 30
+
+
 
     def wait_to_update(self) -> str:
         try:
-            return int(self.config['app']['wait_to_update'])
+            retvar = self.config['app']['wait_to_update']
         except KeyError: 
-            logging.info('No setting wait_to_update found for refeed, using default value 15')
-            return 15
-            
+            logging.warning('No setting wait_to_update found for refeed, using default value 15')
+            retvar = 15
+
+        if not isinstance(retvar, int):
+            logging.exception('[app][wait_to_update] value is not int')
+            raise UserConfigError('[app][wait_to_update] value is not int')
+        else:
+            return retvar
+
+class UserConfigError(Exception):
+    """ To be raised if data returned from config.yaml does not match specifications
+    """
+    pass
