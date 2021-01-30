@@ -14,7 +14,6 @@ import logging
 from mailparser import MailParser
 from mailparser.exceptions import MailParserReceivedParsingError
 from feedgen.feed import FeedGenerator
-<<<<<<< HEAD
 
 # INTERNAL
 """ If we use the form `import x`, we can modify x.var. 
@@ -22,7 +21,6 @@ from feedgen.feed import FeedGenerator
  The second form, where the namespace is modifies, it is equivalent to setting 
  the value of the import attrs to a module-specific global"""
 import config
-=======
 # INTERNAL
 #pylint tells you not to do this, but it is correct
 from . import config, global_config 
@@ -30,7 +28,6 @@ from . import config, global_config
 config_path = global_config.config_path
 data_path = global_config.data_path
 static_path = global_config.static_path
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
 
 class Feed():
     """ Instanceable class to manage a named feed including storage, retrieval and genration functions.
@@ -130,11 +127,7 @@ class Feed():
         if self.alternates != {}:
             try: 
                 for alt_id, body in self.alternates.items():
-<<<<<<< HEAD
                     with Path(config.paths["static"]).joinpath('alt', '{}.html'.format(str(alt_id))).open(mode='w') as f:
-=======
-                    with open(Path(static_path).joinpath('alt', '{}.html'.format(str(alt_id))), 'w') as f:
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
                         f.write(body)
             except Exception: # Exception gets *most* inbuilt exceptions, except KeyboardInterrupt, SystemInterrupt and some others which are out of scope
                 logging.error('Failed to write some html alt pages to file for new entries for feed {}'.format(self.feed_name), exc_info=True)
@@ -259,24 +252,14 @@ class FeedTools():
                     del_feeds.append(feed)
                     
                     try: 
-<<<<<<< HEAD
                         Path(config.paths["static"]).joinpath('feed', '{}.html'.format(feed)).unlink()
                     except FileNotFoundError:
-=======
-                        os.remove(Path(static_path).joinpath('feed', '{}.html'.format(feed)))
-                    except Exception:
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
                         logging.error('Failed to remove feed file for no longer defined feed: {}'.format(feed), exc_info=True)
 
                     for id_ in ids: 
                         try:
-<<<<<<< HEAD
                             Path(config.paths["static"]).joinpath('alt', '{}.html'.format(id_)).unlink()
                         except FileNotFoundError: 
-=======
-                            os.remove(Path(static_path).joinpath('alt', '{}.html'.format(id_)))
-                        except Exception: 
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
                             logging.error('Failed to remove feed alternate html files: {}, for no longer defined feed: {}'.format(id_, feed), exc_info=True)  
 
             try: # just as it is a bad idea to mutate dict during iteration on it, it is probably a bad idea for shelves.
@@ -313,9 +296,5 @@ class FeedTools():
         random.seed(None, 2)
         alternate_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=30)) 
         while alternate_id in all_ids:
-<<<<<<< HEAD
             alternate_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=30)) 
-=======
-            alternate_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=30)) 
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
         return alternate_id

@@ -9,7 +9,6 @@ import shelve
 import logging
 from socket import error as SocketError, timeout as SocketTimeout
 from ssl import SSLError, CertificateError
-<<<<<<< HEAD
 
 # 3RD PARTY 
 import mailparser
@@ -26,22 +25,6 @@ import config
     Errors due to Pylint bugs:
        ` Value 'Union' is unsubscriptable` on typehints is a python3.9 error (PyCQA/pylint#3882)
 """
-=======
-# pypi
-import mailparser
-from imapclient import IMAPClient, exceptions as IMAPExceptions
-#feedgen
-from . import config, global_config 
-
-config_path = global_config.config_path
-data_path = global_config.data_path
-
-""" Please ignore the following pylint errors.
-    Errors due to Pylint bugs:
-       ` Value 'Union' is unsubscriptable` on typehints is a python3.9 error (PyCQA/pylint#3882)
-"""
-
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
 
 class MailFetch():
 
@@ -58,13 +41,8 @@ class MailFetch():
 
         try: 
             # open configs
-<<<<<<< HEAD
             account_config = config.Account(config.paths["config"])
             feed_config = config.Feed(config.paths["config"])
-=======
-            account_config = config.Account(config_path)
-            feed_config = config.Feed(config_path)
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
             # get account info
             account_name = feed_config.account_name(feed_name)
             server_options = account_config.server_options(account_name)
@@ -169,8 +147,4 @@ class GenericHandledException(Exception):
 
     Allows tasker module to skip current job if a handled exception occurs (as opposed to simply skipping for all Exceptions.)
     """
-<<<<<<< HEAD
-    pass
-=======
-    pass
->>>>>>> e5d1f817b9c100063a6da15ad48f7673757bf99a
+    pass 
