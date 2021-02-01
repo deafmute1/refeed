@@ -1,0 +1,17 @@
+attrs==20.3.0
+feedgen==0.9.0
+IMAPClient==2.2.0
+iniconfig==1.1.1
+lxml==4.6.2
+mail-parser==3.14.0
+packaging==20.9
+pluggy==0.13.1
+py==1.10.0
+pyparsing==2.4.7
+pytest==6.2.2
+python-dateutil==2.8.1
+PyYAML==5.4.1
+schedule==0.6.0
+simplejson==3.17.2
+six==1.15.0
+toml==0.10.2

@@ -1,0 +1,5 @@
+IMAPClient>=2.2.0
+pyyaml
+mail-parser
+feedgen
+schedule

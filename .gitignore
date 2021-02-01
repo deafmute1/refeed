@@ -3,7 +3,7 @@
 refeed/run 
 
 # Test data (that we don't want public!)
-refeed/test/data/private 
+refeed/test/data/private/* 
 
 # VIM (from githbub/gitignore) 
 # Swap
