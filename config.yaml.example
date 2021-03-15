@@ -1,81 +1,79 @@
-# Don't leave empty lines in, they're there for readability of the documentation so you can tell what options the comment belongs to. They WILL break YAML parsing. 
 # Anything noted as required MUST BE SET.
 
 # app level settings
 app:
-
   # Valid options for log_level (from most to least verbose): DEBUG, INFO, WARNING, ERROR, CRITICAL
   log_level: 'WARNING'
-
   # how long to wait between trying to update feeds (an intege representing minutes)
   # Default: 15
   wait_to_update: 5
-
-  # path to folder to be served by web server (contains xml feeds, alternate html pages, logo) 
-  # Default: <refeed install root>/static 
-  static_path: '/var/www/html/refeed'
+  # Refeed adds "alternate" links for each feed entry in example.com/alt/feed/*.html, 
+  # these links point to the the body/content of the entry *only* as a html file.
+  # Set this value to how many of these pages should be kept per feed before deleting the oldest.
+  alternate_cache: 25 
+  paths: 
+    # path to folder to be served by web server (contains xml feeds, alternate html pages, logo) 
+    # Default: <refeed install root>/static 
+    static: '/var/www/html/refeed'
+    # path to log 
+    # Default: <refeed install root>/run/log/root.log 
+    log: '/var/log/refeed/root.log'
 
 # imap settings
 accounts:
-
   # This is a unique name used to identify and account. Each account name is to be specified ONLY once in the accounts section.
   # this is an internal identifer only; you may simple use acccount_one, account_two if you wish. 
   unique-account-name:
-
     server:
-
       # Required. 
       host: 'mail.example.com'
-
       port: 993
       ssl: True
       stream: False 
-
     auth:
-
       # Supported: 'login' (use this if unsure), 'plain_login', 'oauth'
       auth_type: 'login'
-
       user: 'user@example.com'
-      password: '*******'
+      password: 'password123'
 
 # everything related to the generation of the feed
 feeds: 
-
   # A unique name must be provided for each feed (including across accounts). 
   # This provies the atom feed (file) name, and is used to identify it. 
   unique-feed-name:
-
     # Must a folder that exists on server
-    folder: 'INBOX'
-
+    folder: 'INBOX' 
     # Required. Must match to a account defined above.
     account_name: "my_account_name" 
-    
-    # Refeed adds "alternate" links for each feed entry in example.com/alt/*.html, 
-    # these links point to the the body/content of the entry *only* as a html file.
-    # Set this value to how many of these pages should be kept before deleting the oldest.
-    alternate_cache: 25 
-    
-    # Lists of regex patterns to match against a mail property for filtering
+    # Key:value pairs of regex and filter operation (either OR, AND or EXCLUDE) to match against 
+    # a mail property.  
+    #  
+    # 'EXCLUDE': Exclude the mail from feed if one or more regex matches are found in the mail property (1st priority).
+    # 'AND': Include the mail in feed, only if one or more regex matches are found in the mail property. 
+    #   (unless overruled by an EXCLUDE or another AND, 2nd priority).
+    # 'OR' : Include the mail in feed, only if one or more regex matches are found in the mail property for any OR filter.
+    #   (unless overruled by an EXCLUDE or AND, 3rd priority). 
+    #   
     # Regex should be standard python regex per 
     #   - Offical docs: https://docs.python.org/3/library/re.html
     #   - Online regex tester w/ python support: https://regex101.com/
+    #     
     # See https://github.com/SpamScope/mail-parser#description for full list of valid values for mail properties
     # Some are probably not a good idea to use (e.g. body), or useless (timezone, sender ip address etc.).
-    # Properties you may want: bcc, cc, date, delivered_to, from_, subject, to,
+    # Properties you most likely want: bcc, cc, date, delivered_to, from_, subject, to,
     filters:
       date: 
-        - 'python regex here'
-      from_: # when providing a list, only mail that matches ALL regex in list will be added to feed
-        - 'python regex here'
-        - 'python regex here'
+        OR: 'python regex here'
+      from_: 
+        AND: 'python regex here'
+        EXCLUDE: 'python regex here'
+    # Info to set some atom paramters. 
+    # If left unset, the example values are the default values. 
     feed_info: 
       protocol: 'https://'
       fqdn: 'example.com' 
       author-name: 'John Doe'
       language: 'en' 
-
       # A file located in config.paths["static"], that should be twice as wide as it is tall
       logo: 'logo.png'
     

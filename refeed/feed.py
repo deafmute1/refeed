@@ -40,14 +40,14 @@ class Feed():
             except KeyError as e:
                 if not self.feed_name in shelf:
                     # Mandatory ATOM values
-                    fg_config = config.yaml.feed.info(self.feed_name)
+                    fg_config = config.ParseFeed.info(self.feed_name)
                     self.fg = FeedGenerator()
                     self.fg.id('tag:{},{}/feeds/{}.xml'.format(fg_config['fqdn'], date.today(), feed_name))
                     href_ = '{}{}/feeds/{}.xml'.format(fg_config['protocol'], fg_config['fqdn'], feed_name)
                     self.fg.link(rel='self', type='application/atom+xml', href=href_)
                     self.fg.title(feed_name)
-                    self.fg.subtitle('Feed generated from mail messages recieved at {} by refeed'.format(config.yaml.feed.account_name(self.feed_name)))
-                    self.fg.author(name=fg_config.get('author_name', 'Default Name'))
+                    self.fg.subtitle('Feed generated from mail messages recieved at {} by refeed'.format(config.ParseFeed.account_name(self.feed_name)))
+                    self.fg.author(name=fg_config['author-name']) 
 
                     # Optional values
                     try: 
@@ -82,7 +82,7 @@ class Feed():
     def add_entry(self, mail:Tuple[int, MailParser]) -> None:
         random.seed(None, 2)
         fe = self.fg.add_entry(order='prepend') 
-        fg_config = config.yaml.feed.info(self.feed_name)
+        fg_config = config.ParseFeed.info(self.feed_name)
         
         # id
         try:
@@ -125,7 +125,7 @@ class Feed():
                 logging.error('Failed to write some html alt pages to file for new entries for feed {}'.format(self.feed_name), exc_info=True)
             finally:
                 logging.info('Successfully generated html alt pages: {} for feed {}'.format(list(self.alternates.keys()), self.feed_name))
-                FeedTools.cleanup_alts(self.feed_name, config.yaml.feed.alternate_cache(self.feed_name))
+                FeedTools.cleanup_alts(self.feed_name, config.ParseFeed.alternate_cache(self.feed_name))
 
         # generate xml
         try: 
@@ -201,7 +201,7 @@ class FeedTools():
 
     @classmethod
     def cleanup_feeds(cls) -> None:
-        """ Remove a feed completely from all data stores if not present in config.yaml.
+        """ Remove a feed completely from all data stores if not present in config.conf.
         
         This includes:
             - the fg object in feeds.shelf
@@ -218,7 +218,7 @@ class FeedTools():
         with shelve.open(str(Path(config.paths["data"]).joinpath('feeds.shelf'))) as shelf:
             del_feeds = []
             for feed in shelf.keys(): 
-                if feed not in config.yaml.feed.names():
+                if feed not in config.ParseFeed.names():
                     del_feeds.append(feed)  # we should not remove objects from shelf as we iterate over it
             try:
                 for feed in del_feeds:
@@ -239,7 +239,7 @@ class FeedTools():
         with shelve.open(str(Path(config.paths["data"]).joinpath('alternate_ids.shelf'))) as shelf:
             del_feeds = []
             for feed, ids in shelf.items(): 
-                if feed not in config.yaml.feed.names(): 
+                if feed not in config.conf.feed.names(): 
                     del_feeds.append(feed)
                     
                     try: 
@@ -263,7 +263,7 @@ class FeedTools():
         with shelve.open(str(Path(config.paths["data"]).joinpath('mail_uuids.shelf'))) as shelf:
             del_feeds = []
             for feed in shelf.keys(): 
-                if feed not in config.yaml.feed.names():
+                if feed not in config.ParseFeed.names():
                     del_feeds.append(feed)
             try:
                 for feed in del_feeds:

@@ -10,5 +10,5 @@
 # 3RD PARTY 
 from setuptools import setup, find_packages # (included with pip package) 
 
-setup(name="refeed", packages=find_packages(where='.'))
+setup(name="refeed", packages=find_packages())
 

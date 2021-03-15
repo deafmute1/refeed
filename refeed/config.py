@@ -11,152 +11,93 @@ import re
 # 3RD PARTY
 import yaml
 
-# Default paths 
-paths = {
-    "config": Path(__file__).parents[1].joinpath('run', 'config.yaml').resolve(),
-    "log": Path(__file__).parents[1].joinpath('run', 'log', 'root.log').resolve(),
-    "data": Path(__file__).parent[1].joinpath('run', 'data').resolve(),
-    "static": Path(__file__).parent[1].joinpath('run', 'static').resolve() ,
-}
-
-paths_flag_dir = {
-    "config": False,
-    "log": False, 
-    "data": True,
-    "static": True, 
-}
-
-yaml = None 
-
-class YAMLContainer():  
-    """ Intended to be a system-wide container to the below methods/classes in this module
-        in order to avoid having to pull up an instance and grab from disc in every function within refeed. 
-
-        At run time (i.e. in tasker, between each full runthrough of the main task) init this class,
-        and store the instance to config.yaml. Therefore, this can be accessed globally in refeed,
-        without having to pass this instance around to each function.
-
-    :param config_path: An absolute filesystem path to a yaml file per config.yaml.example space, using
-                        pathlib.Path object.
-    """
-    def __init__(self, config_path:Path) -> None: 
-        self.account = _PullAccount(config_path)
-        self.feed = _PullFeed(config_path) 
-        self.app = _PullApp(config_path)
-        
-
-class _PullConfig(ABC): 
-    """ Abstract parent class to pull config from yaml files.
-
-    :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
-    """ 
-    def __init__(self, config_path:Path) -> None:
-        logging.debug('Entering Config.__init__')
+class ConfigData():
+    def __init__(self, config_path:Path): 
+        logging.debug('Entering ConfigContext.__init__')
         try: 
             with config_path.open() as f:
-                self.config = (yaml.safe_load(f))
+                self.yaml = (yaml.safe_load(f))
                 logging.debug('Loaded config.yaml')
         except Exception as e:
-            print(e)
-
-class _PullAccount(PullConfig):
-    """ Child class of Config providing wrappers to access account section of config 
-
-    :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
-    """
-    def __init__(self, config_path:Path) -> None:
-        super().__init__(config_path)
+            raise UserConfigError from e
         
-    def auth_type(self, account_name:str) -> str:
-        return str(self.config['accounts'][account_name]['auth']['auth_type'])
-
-    def server_options(self, account_name:str) -> Dict:
-       return self.config['accounts'][account_name]['server']
-
-    def credentials(self, account_name:str) -> Tuple[str, str]:
-        user = str(self.config['accounts'][account_name]['auth']['user'])
-        password = str(self.config['accounts'][account_name]['auth']['password'])
-        return (user, password)
-
-class _PullFeed(PullConfig): 
-    """ Child class of Config providing wrappers to access feed section of config 
-
-    :param config_path: An absolute filesystem path to a yaml file per config.yaml.example spec
-    """
-    def __init__(self, config_path:Path) -> None:
-        super().__init__(config_path)
-
-    def names(self) -> List[str]:
+        default_paths = {
+            "config": Path(__file__).parents[1].joinpath('run', 'config.yaml').resolve(),
+            "log": Path(__file__).parents[1].joinpath('run', 'log', 'root.log').resolve(),
+            "data": Path(__file__).parents[1].joinpath('run', 'data').resolve(),
+            "static": Path(__file__).parents[1].joinpath('run', 'static').resolve()
+        }
+        self.paths = {**default_paths, **self.yaml['app']['paths']}
+        self.alt_cache = yaml['app'].get('alternate_cache', 25)
+        self.wait_to_update = yaml['app'].get('wait_to_update', 15)
+    
+    def f_names(self) -> List[str]:
         try: 
-            for e in self.config['feeds']:
+            for e in self.yaml['feeds']:
                 yield str(e)
         except KeyError as e:
             logging.critical('No feed names found in config.yaml, raising UserConfigError.', exc_info=True)
             raise UserConfigError() from e
 
-    def account_name(self, feed_name:str) -> Union[str, type(None)]:
+    def f_account_name(self, feed_name:str) -> Union[str, type(None)]:
         try: 
-            return str(self.config['feeds'][feed_name]['account_name'])
+            return str(loaded_yaml['feeds'][feed_name]['account_name'])
         except KeyError as e:
             logging.error('No matching account name found for {}, raising UserConfigError'.format(feed_name), exc_info=True)
             raise UserConfigError() from e
-            
-    def folder(self, feed_name:str) -> str: 
+         
+    def f_folder(self, feed_name:str) -> str: 
         try: 
-            return str(self.config['feeds'][feed_name]['folder'])
+            return str(loaded_yaml['feeds'][feed_name]['folder'])
         except KeyError: # return default value
             logging.warning('No folder found for {}, using default value "INBOX"'.format(feed_name), exc_info=True)
             return 'INBOX'
  
-    def filters(self, feed_name:str) -> Union[Dict[str, List[re.Pattern]], None]: 
-        """ Returns filters, does not check if is valid regex
+    def f_filters(self, feed_name:str) -> Union[Dict[str, Dict[str, re.Pattern]], None]: 
+        """ Returns filters as compiled regex patterns. 
         """
         try:
-            filters = self.config['feeds'][feed_name]['filters']
+            filters = loaded_yaml['feeds'][feed_name]['filters']
         except KeyError: 
             logging.warning("No filters found in config.yaml for {}, is this correct?".format(feed_name), exc_info=True)
             return None
 
         ret_filters = {}
-        for key, value in filters.items(): 
+        for property_, pfilters in filters.items(): 
+            if not isinstance(pfilters, dict): 
+                exceptmsg = "filters from mail property {} in feed {} are not returned from yaml object as a dict: Check YAML formatting".format(property_, feed_name)
+                logging.exceptiopn(exceptmsg) 
+                raise UserConfigError(exceptmsg) 
             try:
-                ret_filters[str(key)] = [re.compile(str(e)) for e in value]
+                ret_filters[str(property_)] = {str(rule):re.compile(str(regex)) for (rule,regex) in pfilters.items()}  
             except re.error as e: 
-                logging.exception("Invalid regex in filters for feed: {}, header: {}".format(feed_name, key))
+                logging.exception("Invalid regex in filters for mail property: {} in feed {}".format(mailprop, feed_name))
                 raise UserConfigError() from e
-            except TypeError as e:
-                logging.exception("Bad type in filters for feed: {}, maybe failure to provide regex as a YAML list?".format(feed_name))
-                raise UserConfigError() from e 
         return ret_filters
 
-    def info(self, feed_name:str) -> DefaultDict[str, str]:
+    def f_info(self, feed_name:str) -> Dict[str, str]:
+        default_info = {
+            'protocol': 'https://',
+            'fqdn': 'example.com',
+            'author-name': 'John Doe',
+            'language': 'en',
+            'logo': 'logo.png' 
+        }
         try:
-            # None is acccepted by default dict, but actually causes it to just behave as standard dict 
-            # lamba: None will actually provide None instead of KeyError as its a callable
-            return  defaultdict(lambda: None, self.config['feeds'][feed_name]['feed_info']) 
-        except KeyError: # feed_info heading doesnt exist
-            logging.exception('No heading in config.yaml called feed_info found, using NoneType for all settings')
-            return defaultdict(lambda: None)
+            yaml_info = loaded_yaml['feeds'][feed_name]['feed_info']
+        except KeyError:
+            logging.warning('No heading in config.yaml called feed_info found, using default values for all settings', exc_info=True)
+        # From PEP448: merges two dicts using unpacking operator 
+        return {**default_info, **yaml_info} 
 
-    def alternate_cache(self, feed_name:str) -> int: 
+    def f_alternate_cache(self, feed_name:str) -> int: 
         try:
-            retvar = self.config['feeds'][feed_name]['alternate_cache']
+            retvar = loaded_yaml['feeds'][feed_name]['alternate_cache']
         except KeyError:
             logging.info('No setting alternate cache found for feed {}, using default value 25'.format(feed_name), exc_info=True)
             return 25
-
-        if not isinstance(retvar, int):
-            logging.exception('[feeds][{}][alternate_cache] value is not int'.format(feed_name))
-            raise UserConfigError('[feeds][{}][alternate_cache] value is not int'.format(feed_name))
-        else:
-            return retvar
-
-
-class _PullApp(PullConfig):
-    def __init__(self, config_path:Path) -> None:
-        super().__init__(config_path)
-
-    def log_level(self) -> str:
+ 
+    def a_log_level(self) -> str:
         # See https://docs.python.org/3/library/logging.html#levels
         encode_level = { 
             'critical'.casefold(): 50,
@@ -167,16 +108,16 @@ class _PullApp(PullConfig):
         }
 
         try:
-            return encode_level[str(self.config['app']['log_level']).casefold()]
+            return encode_level[str(loaded_yaml['app']['log_level']).casefold()]
         except KeyError:
             logging.error('Either [app][log_level] is not set in config.yaml, or it is a bad value. Returning default log level (warning)')
             return 30
         except Exception: 
             return 30
 
-    def wait_to_update(self) -> str:
+    def a_wait_to_update(self) -> str:
         try:
-            retvar = self.config['app']['wait_to_update']
+            retvar = loaded_yaml['app']['wait_to_update']
         except KeyError: 
             logging.warning('No setting wait_to_update found for refeed, using default value 15')
             retvar = 15
@@ -186,9 +127,6 @@ class _PullApp(PullConfig):
             raise UserConfigError('[app][wait_to_update] value is not int')
         else:
             return retvar
-
-    def static_path(self) -> Path:
-        return self.config['app']['static_path'] 
 
 class UserConfigError(Exception):
     """ To be raised if data returned from config.yaml does not match specifications

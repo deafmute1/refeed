@@ -23,34 +23,40 @@ class Run():
         Run from refeed.main().
     """
     def __init__(self) -> None:
-        _Tasks.pull_yaml_config()        
+        _startup()
+        _main() 
+
+
+    def  _startup(self) -> None 
+        config.PullConfig()   
         # start root logger (TODO: Add loggers per module) 
         logging.basicConfig(filename=str(refeed.config.paths["log"]), level=conf.log_level(), filemode='a', format='%(asctime)s %(message)s')
 
         # handle SIGHUP and SIGTERM
-        signal.signal(signal.SIGHUP, self._exit)
-        signal.signal(signal.SIGTERM, self._exit)
+        signal.signal(signal.SIGHUP, self._sig_handle)
+        signal.signal(signal.SIGTERM, self._sig_handle)
 
         # setup scheduler 
         self.run = schedule.Scheduler()
         self.run.every(conf.wait_to_update()).minutes.do(_Tasks.generate_feeds_from_new_mail)
         self.run.every(1).week.do(_Tasks.cleanup_feeds)
 
-        # Order unspecific startup jobs 
+        # Startup jobs 
         _Tasks.cleanup_feeds() 
-        _Tasks.make_run_dirs() 
+        _Tasks.make_run_dirs()
 
-        # Repeating jobs 
+    def _main(self) -> None: 
         while self.run.jobs != []: 
             self.run.run_pending()
             time.sleep(1)
-            _Tasks.pull_yaml_config() 
+            config.PullConfig() # allow user to update config.yaml without restarting the process
             time.sleep(1)
 
         logging.critical("Job list has somehow become empty without manual clearing; exiting") 
         sys.exit("Exiting due to empty Job List")
 
-    def _exit(self) -> None:
+
+    def _sig_handle(self) -> None:
         logging.critical('Either SIGHUP/SIGTERM sent to refeed; exiting by clearing job list - any job currently in progress will complete. ')
         self.run.clear()
         sys.exit("Exiting due to SIGHUP/SIGTERM")
@@ -59,7 +65,7 @@ class _Tasks():
     @classmethod
     def generate_feeds_from_new_mail(cls) -> None:
         logging.info('Mail fetch and feed generation job starting')
-        for feed_name in config.yaml.feed.names():
+        for feed_name in config.ParseFeed.names():
             logging.info('feed_name_tasks: {}'.format(feed_name))
             with feed.Feed(feed_name) as f:
                 try:
@@ -100,10 +106,4 @@ class _Tasks():
                 except FileExistsError:
                     logging.info("Directory {} from config.paths[{}] not created as it already exists.".format(str(path), name))
                 else:
-                    logging.info("Directory {} created".format(str(path)))
-
-    @classmethod
-    def pull_yaml_config(cls) -> None:
-        config.yaml = config.YAMLContainer(config.paths["config"])
-        config.paths['static'] = config.yaml.app.static_path() 
-
+                    logging.info("Directory {} created".format(str(path))

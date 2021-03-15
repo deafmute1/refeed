@@ -27,7 +27,6 @@ import config
 """
 
 class MailFetch():
-
     """ Provides tools to fetch mail as required using _IMAPConn
     """
 
@@ -41,13 +40,13 @@ class MailFetch():
 
         try: 
             # get account info
-            account_name = config.yaml.feed.account_name(feed_name)
-            server_options = config.yaml.account.server_options(account_name)
-            auth_type = config.yaml.account.auth_type(account_name)
-            credentials = config.yaml.account.credentials(account_name)
+            account_name = config.ParseFeed.account_name(feed_name)
+            server_options = config.ParseAccount.server_options(account_name)
+            auth_type = config.ParseAccount.auth_type(account_name)
+            credentials = config.ParseAccount.credentials(account_name)
             # get feed/filter info
-            filters = config.yaml.feed.filters(feed_name)
-            folder = config.yaml.feed.folder(feed_name)
+            filters = config.ParseFeed.filters(feed_name)
+            folder = config.ParseFeed.folder(feed_name)
         except config.UserConfigError() as e: 
             raise ConfigError() from e 
 
@@ -62,7 +61,7 @@ class MailFetch():
                 try: 
                     uuids = server.search([u'SINCE', (datetime.utcnow().date() - timedelta(days=since))] , 'UTF-8')
                 except IMAPExceptions.InvalidCriteriaError as e: 
-                    logging.critical('Malformed imap search criteria, refeed will never be able to fetch new mail. Go get the author!', exc_info=True)
+                    logging.critical('Malformed imap search criteria, refeed will never be able to fetch new mail. Something is very wrong, open a github issue', exc_info=True)
                     raise GenericHandledException() from e
 
                 new_mail = {}
@@ -70,18 +69,31 @@ class MailFetch():
                     uuid = int(uuid) # uuid is 32bit int, just cast to int in case IMAPClient is returning bytes. 
                     mail = mailparser.parse_from_bytes(server.fetch([uuid], ['RFC822'])[uuid][b'RFC822'])
                     if filters is not None: 
-                        for field, re_filters in filters.items():
+                        for property_, filters in filters.items():
                             try:
-                                value_to_filter = getattr(mail, field)
+                                property_obj = getattr(mail, field)
                             except AttributeError:
-                                logging.exception('filters contains a key that is not present in parsed mail object')
+                                logging.exception('filters contains a mail property that is not present in parsed mail object:', exc_info=True)
+                                logging.debug('Raw mail dump: {}'.format(mail.name_raw))
+                                if (mail.defects() is not None) and (mail.defects() != []): 
+                                    logging.debug('Mail not in compliance with RFC; defects: {}'.format(mail.defects()))
                                 raise ConfigError() from e
 
-                            for filter_ in  re_filters:
-                                if re.search(filter_, str(value_to_filter)) is None: 
-                                    break
+                            for oper, filter_ in filters.items():
+                                or_passing = None 
+                                re_res = filter_.search(property_obj)
+                                if (oper.casefold() == 'EXCLUDE'.casefold()) and (re_res is not None):
+                                    break 
+                                elif (oper.casefold() == 'AND'.casefold()) and (re_res is None):
+                                    break 
+                                elif (oper.casefold() == 'OR'.casefold()):
+                                    if (or_passing is None) and (re_res is None):
+                                        or_passing = False  
+                                    else:
+                                        or_passing = True 
                             else: 
-                                new_mail[uuid] = mail   
+                                if (or_passing) or (or_passing is None): 
+                                    new_mail[uuid] = mail   
 
             except (SocketTimeout, SocketError) as e: 
                 logging.exception('A network error with the socket library has caused mail._IMAPConn in mail.MailFetch.newmail() to fail/drop server connection for account {}'.format(account_name))
@@ -118,7 +130,7 @@ class _IMAPConn():
         try: 
             getattr(self.server, auth_type)(*credentials)
         except (NameError, TypeError) as e: 
-            logging.exception('No (or wrong type of) credentials were passed to mail._IMAPConn for imap server {} from config.yaml, are you sure this is correct? '.format(self.server_options['host']), exc_info=True)
+            logging.exception('No (or wrong type of) credentials were passed to mail._IMAPConn for imap server {} from config.conf, are you sure this is correct? '.format(self.server_options['host']), exc_info=True)
             raise IMAPExceptions.LoginError() from e
 
     def __enter__(self) -> IMAPClient:
